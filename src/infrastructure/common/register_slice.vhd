@@ -4,8 +4,8 @@ library IEEE;
 library libcommons;
     use libcommons.misc.ALL;
     use libcommons.lfsr.ALL;
-library vaxis;
-    use vaxis.vaxis_pkg.ALL;
+library libramen;
+    use libramen.core_pkg.ALL;
 
 entity axis_register_slice is
 generic (

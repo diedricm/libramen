@@ -2,7 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity xilinx_configram_simple_dual_port is
+entity xilinx_dual_port_ram is
 generic (
      AWIDTH : integer := 12;  -- Address Width
      DWIDTH : integer := 72;  -- Data Width
@@ -18,9 +18,9 @@ port (
      addrb : in std_logic_vector(AWIDTH-1 downto 0);      -- Read Address
      doutb : out std_logic_vector(DWIDTH-1 downto 0)      -- Data Output
 );
-end xilinx_configram_simple_dual_port;
+end xilinx_dual_port_ram;
 
-architecture rtl of xilinx_configram_simple_dual_port is
+architecture rtl of xilinx_dual_port_ram is
 
     constant C_AWIDTH : integer := AWIDTH;
     constant C_DWIDTH : integer := DWIDTH;

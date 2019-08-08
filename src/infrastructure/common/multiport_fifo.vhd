@@ -3,13 +3,12 @@ library IEEE;
 	use IEEE.NUMERIC_STD.ALL;
 library libcommons;
     use libcommons.misc.ALL;
-library vaxis;
-    use vaxis.vaxis_pkg.ALL;
+library libramen;
+    use libramen.core_pkg.ALL;
     
-entity vaxis_multiport_fifo is
+entity multiport_fifo is
 generic (
-	TDATA_WIDTH : natural := 12;
-	TDEST_WIDTH : natural := 14;
+	TUPPLE_COUNT : natural := 4;
 	VIRTUAL_PORT_CNT_LOG2 : natural := 4;
 	MEMORY_DEPTH_LOG2 : natural := 6;
 	ALMOST_FULL_LEVEL : natural := 8;
@@ -28,37 +27,15 @@ Port (
 	read_enable : in std_logic;
 	next_output_skip_prftchd_data : in std_logic;
 	
-	TDATA_s  : in std_logic_vector((TDATA_WIDTH*8)-1 downto 0);
-	TVALID_s : in std_logic;
-	TREADY_s : out std_logic;
-	TDEST_s  : in std_logic_vector(TDEST_WIDTH-1 downto 0);
-	TUSER_s  : in std_logic_vector(TUSER_SIZE_IN_BIT-1 downto 0);
-	TLAST_s  : in std_logic;
-	fifo_port_dest : in std_logic_vector(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
+	stream_s  : in flit_ext(tuples(TUPPLE_COUNT-1 downto 0));
+	ready_s : out std_logic;
 	
-	TDATA_m  : out std_logic_vector((TDATA_WIDTH*8)-1 downto 0);
-	TVALID_m : out std_logic;
-	TREADY_m : in std_logic;
-	TDEST_m  : out std_logic_vector(TDEST_WIDTH-1 downto 0);
-	TUSER_m  : out std_logic_vector(TUSER_SIZE_IN_BIT-1 downto 0);
-	TLAST_m  : out std_logic
+	stream_m  : out flit(tuples(TUPPLE_COUNT-1 downto 0));
+	ready_m : in std_logic
 );
-end vaxis_multiport_fifo;
+end multiport_fifo;
 
-architecture Behavioral of vaxis_multiport_fifo is
-	ATTRIBUTE X_INTERFACE_INFO : STRING;
-	ATTRIBUTE X_INTERFACE_INFO of TDEST_s  : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_S TDEST";
-	ATTRIBUTE X_INTERFACE_INFO of TDATA_s  : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_S TDATA";
-	ATTRIBUTE X_INTERFACE_INFO of TLAST_s  : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_S TLAST";
-	ATTRIBUTE X_INTERFACE_INFO of TUSER_s  : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_S TUSER";
-	ATTRIBUTE X_INTERFACE_INFO of TVALID_s : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_S TVALID";
-	ATTRIBUTE X_INTERFACE_INFO of TREADY_s : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_S TREADY";
-	ATTRIBUTE X_INTERFACE_INFO of TDEST_m  : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_M TDEST";
-	ATTRIBUTE X_INTERFACE_INFO of TDATA_m  : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_M TDATA";
-	ATTRIBUTE X_INTERFACE_INFO of TLAST_m  : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_M TLAST";
-	ATTRIBUTE X_INTERFACE_INFO of TUSER_m  : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_M TUSER";
-	ATTRIBUTE X_INTERFACE_INFO of TVALID_m : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_M TVALID";
-	ATTRIBUTE X_INTERFACE_INFO of TREADY_m : SIGNAL is "xilinx.com:interface:axis:1.0 AXIS_M TREADY";
+architecture Behavioral of multiport_fifo is
 	
 	function RAM_PIPELINE_DEPTH_lookup(memtype : string) return natural is
 	begin
@@ -76,7 +53,7 @@ architecture Behavioral of vaxis_multiport_fifo is
         end if;
 	end;
 	
-	constant data_width_in_bits : natural := TDATA_WIDTH*8 + TDEST_WIDTH + TUSER_SIZE_IN_BIT + 1;
+	constant data_width_in_bits : natural := TUPPLE_COUNT*DATA_SINGLE_SIZE_IN_BYTES*8 + CDEST_SIZE_IN_BIT + PTYPE_SIZE_IN_BIT + 1;
 	constant addr_width_in_bits : natural := VIRTUAL_PORT_CNT_LOG2 + MEMORY_DEPTH_LOG2;
     constant RAM_PIPELINE_DEPTH : natural := RAM_PIPELINE_DEPTH_lookup(MEMORY_TYPE);
 	
@@ -117,11 +94,11 @@ architecture Behavioral of vaxis_multiport_fifo is
 	signal advance_read_pipeline : std_logic;
 begin
 
-    TREADY_s <= '1' when credits_list(to_integer(last_write_chan)) > 2 else '0';
-	TVALID_m <= read_addr_delay_line(0).valid AND NOT(next_output_skip_prftchd_data);
-	(TDATA_m, TUSER_m, TLAST_m, TDEST_m) <= read_data_out;
+    ready_s <= '1' when credits_list(to_integer(last_write_chan)) > 2 else '0';
+	stream_m.valid <= read_addr_delay_line(0).valid AND NOT(next_output_skip_prftchd_data);
+	stream_m <= slv_to_flit(read_data_out);
 
-    advance_read_pipeline <= TREADY_m OR NOT(read_addr_delay_line(0).valid);
+    advance_read_pipeline <= ready_m OR NOT(read_addr_delay_line(0).valid);
 
 	read_port_proc: process(ap_clk)
 	   variable curr_read_chan : chan_id;
@@ -142,7 +119,7 @@ begin
                     read_addr_delay_line(RAM_PIPELINE_DEPTH-1).valid <= '0';
                     
                     -- ack succesful read
-                    if is1(TVALID_m) then
+                    if is1(stream_m.valid) then
                         actual_read_ptr_list(to_integer(read_addr_delay_line(0).self_chan)) <= read_addr_delay_line(0).req_addr + 1;
                         read_credit_modified <= read_addr_delay_line(0).self_chan;
                         read_credit_modified_valid <= '1';
@@ -185,14 +162,14 @@ begin
             write_enable <= '0';
             almost_full <= '0';
             
-            if is1(TVALID_s AND TREADY_s AND rst_n) then
-                flit_vaxis_dest := unsigned(fifo_port_dest);
+            if is1(stream_s.valid AND ready_s AND rst_n) then
+                flit_vaxis_dest := unsigned(stream_s.ldest);
                 last_write_chan <= flit_vaxis_dest; 
                 
-                merged_data_write_lane <= TDATA_s & TUSER_s & TLAST_s & TDEST_s;
+                merged_data_write_lane <= flit_to_slv(reduce_flit(stream_s));
                 merged_addr_write_lane <= std_logic_vector(flit_vaxis_dest) & std_logic_vector(write_ptr_list(to_integer(flit_vaxis_dest)));
                 
-                if NOT((TUSER_s = VAXIS_TLAST_MASK_SOFTEND_NO_DATA) OR (TUSER_s = VAXIS_TLAST_MASK_HARDEND_NO_DATA)) then
+                if NOT((stream_s.ptype = TLAST_MASK_SOFTEND_NO_DATA) OR (stream_s.ptype = TLAST_MASK_HARDEND_NO_DATA)) then
                     write_enable <= '1';
                     
                     write_ptr_list(to_integer(flit_vaxis_dest)) <= write_ptr_list(to_integer(flit_vaxis_dest)) + 1;
@@ -247,7 +224,7 @@ begin
         end if;
     end process;
 	
-    mem : entity vaxis.xilinx_configram_simple_dual_port 
+    mem : entity libramen.xilinx_dual_port_ram 
     generic map (
         AWIDTH => addr_width_in_bits, 
         DWIDTH => data_width_in_bits,

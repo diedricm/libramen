@@ -4,14 +4,12 @@ library IEEE;
 library libcommons;
     use libcommons.misc.ALL;
     use libcommons.lfsr.ALL;
-library vaxis;
-    use vaxis.vaxis_pkg.ALL;
+library libramen;
+    use libramen.core_pkg.ALL;
 
 entity vaxis_congestion_feedback is
 generic (
-	TDATA_WIDTH : natural := 12;
-	TDEST_WIDTH : natural := 14;
-	TUSER_WIDTH : natural := 3;
+	TUPPLE_COUNT : natural := 1;
     BACKOFF_DETECTION_PERIOD : natural := 3;
     CIRCUIT_SETUP_PROBE_PERIOD : natural := 3
 );
@@ -21,19 +19,11 @@ Port (
     
     trigger_backoff : in std_logic;
 
-	TDATA_s  : in std_logic_vector((TDATA_WIDTH*8)-1 downto 0);
-	TVALID_s : in std_logic;
-	TREADY_s : out std_logic;
-	TDEST_s  : in std_logic_vector(TDEST_WIDTH-1 downto 0);
-	TUSER_s  : in std_logic_vector(TUSER_WIDTH-1 downto 0);
-	TLAST_s  : in std_logic;
-
-	TDATA_m  : out std_logic_vector((TDATA_WIDTH*8)-1 downto 0);
-	TVALID_m : out std_logic;
-	TREADY_m : in std_logic;
-	TDEST_m  : out std_logic_vector(TDEST_WIDTH-1 downto 0);
-	TUSER_m  : out std_logic_vector(TUSER_WIDTH-1 downto 0);
-	TLAST_m  : out std_logic
+	stream_s  : in flit(tuples(TUPPLE_COUNT-1 downto 0));
+	ready_s : out std_logic;
+	
+	stream_m  : out flit(tuples(TUPPLE_COUNT-1 downto 0));
+	ready_m : in std_logic
 );
 end vaxis_congestion_feedback;
 
@@ -69,12 +59,10 @@ architecture Behavioral of vaxis_congestion_feedback is
 
     signal transmission_active : std_logic;
     
-    signal TDATA_reg  : std_logic_vector((TDATA_WIDTH*8)-1 downto 0);
-	signal TVALID_reg : std_logic;
-	signal TREADY_reg : std_logic;
-	signal TDEST_reg  : std_logic_vector(TDEST_WIDTH-1 downto 0);
-	signal TUSER_reg  : std_logic_vector(TUSER_WIDTH-1 downto 0);
-	signal TLAST_reg  : std_logic;
+    signal stream_reg : flit(tuples(TUPPLE_COUNT-1 downto 0));
+    signal ready_reg : std_logic;	
+    
+    signal stream_m_axi_enc : flit_axis_packed(data(TUPPLE_COUNT*DATA_SINGLE_SIZE_IN_BYTES-1 downto 0));
 begin
 
     
@@ -109,34 +97,35 @@ begin
     end process;
     
     transmission_active <= '1' when (curr_state /= BLOCK_CIRCUIT) else '0';
-    TVALID_reg <= TVALID_s AND transmission_active;
-    TREADY_s <= TREADY_reg AND transmission_active;
-	TDATA_reg <= TDATA_s;
-	TUSER_reg <= TUSER_s;
-	TLAST_reg <= '0';
-	TDEST_reg <= TDEST_s;
+    stream_reg.valid <= stream_s.valid AND transmission_active;
+    ready_s <= ready_reg AND transmission_active;
+	stream_reg.tuples <= stream_s.tuples;
+	stream_reg.ptype <= stream_s.ptype;
+	stream_reg.yield <= '0';
+	stream_reg.cdest <= stream_s.cdest;
 	
-	regslice: entity vaxis.axis_register_slice
+    stream_m <= axis_to_flit(stream_m_axi_enc);
+    regslice: entity libramen.axis_register_slice
     generic map (
-        TDATA_WIDTH => TDATA_WIDTH,
-        TDEST_WIDTH => TDEST_WIDTH,
-        TUSER_WIDTH => TUSER_WIDTH
+        TDATA_WIDTH => TUPPLE_COUNT*DATA_SINGLE_SIZE_IN_BYTES,
+        TDEST_WIDTH => CDEST_SIZE_IN_BIT,
+        TUSER_WIDTH => PTYPE_SIZE_IN_BIT
     ) port map (
         clk => clk,
         rstn => rstn,
-    
-        TDATA_s  => TDATA_reg,
-        TVALID_s => TVALID_reg,
-        TREADY_s => TREADY_reg,
-        TDEST_s  => TDEST_reg,
-        TUSER_s  => TUSER_reg,
-        TLAST_s  => TLAST_reg,
         
-        TDATA_m  => TDATA_m,
-        TVALID_m => TVALID_m,
-        TREADY_m => TREADY_m,
-        TDEST_m  => TDEST_m,
-        TUSER_m  => TUSER_m,
-        TLAST_m  => TLAST_m
+        TDATA_s  => flit_to_axis(stream_reg).data,
+        TVALID_s => flit_to_axis(stream_reg).valid,
+        TREADY_s => ready_reg,
+        TDEST_s  => flit_to_axis(stream_reg).dest,
+        TUSER_s  => flit_to_axis(stream_reg).user,
+        TLAST_s  => flit_to_axis(stream_reg).last,
+        
+        TDATA_m  => stream_m_axi_enc.data,
+        TVALID_m => stream_m_axi_enc.valid,
+        TREADY_m => ready_m,
+        TDEST_m  => stream_m_axi_enc.dest,
+        TUSER_m  => stream_m_axi_enc.user,
+        TLAST_m  => stream_m_axi_enc.last
     );
 end Behavioral;
