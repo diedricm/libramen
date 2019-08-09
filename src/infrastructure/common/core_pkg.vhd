@@ -42,49 +42,77 @@ package core_pkg is
     end record tuple_t;
     type tuple_vec is array (natural range <>) of tuple_t;
 
-    type flit is record
-        tuples : tuple_vec;
+    type flit_single is record
+        tuples : tuple_vec(0 downto 0);
         cdest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
         ptype : std_logic_vector(PTYPE_SIZE_IN_BIT-1 downto 0);
         yield : std_logic;
         valid : std_logic;
-    end record flit;
-    type flit_vec is array (natural range <>) of flit;
+    end record flit_single;
+    type flit_single_vec is array (natural range <>) of flit_single;
     
-    type flit_ext is record
-        tuples : tuple_vec;
-        cdest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
-        ptype : std_logic_vector(PTYPE_SIZE_IN_BIT-1 downto 0);
-        yield : std_logic;
-        valid : std_logic;
+    type flit_ext_single is record
+        base : flit_single;
         ldest : std_logic_vector(LDEST_SIZE_IN_BIT-1 downto 0);
-    end record flit_ext;
-    type flit_ext_vec is array (natural range <>) of flit_ext;
+    end record flit_ext_single;
+    type flit_ext_single_vec is array (natural range <>) of flit_ext_single;
+
+    type flit_quad is record
+        tuples : tuple_vec(3 downto 0);
+        cdest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
+        ptype : std_logic_vector(PTYPE_SIZE_IN_BIT-1 downto 0);
+        yield : std_logic;
+        valid : std_logic;
+    end record flit_quad;
+    type flit_quad_vec is array (natural range <>) of flit_quad;
     
-    type flit_axis_packed is record
-        data : std_logic_vector;
+    type flit_ext_quad is record
+        base : flit_quad;
+        ldest : std_logic_vector(LDEST_SIZE_IN_BIT-1 downto 0);
+    end record flit_ext_quad;
+    type flit_ext_quad_vec is array (natural range <>) of flit_ext_quad;
+    
+    type flit_axis_single_packed is record
+        data : std_logic_vector(DATA_SINGLE_SIZE_IN_BYTES*8-1 downto 0);
         dest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
         user : std_logic_vector(PTYPE_SIZE_IN_BIT-1 downto 0);
         last : std_logic;
         valid : std_logic;
-    end record flit_axis_packed;
+    end record flit_axis_single_packed;
 
-    type flit_ext_axis_packed is record
-        data : std_logic_vector;
+    type flit_ext_axis_single_packed is record
+        data : std_logic_vector(DATA_SINGLE_SIZE_IN_BYTES*8-1 downto 0);
         dest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
         user : std_logic_vector(TUSER_EXT_SIZE_IN_BIT-1 downto 0);
         last : std_logic;
         valid : std_logic;
-    end record flit_ext_axis_packed;
+    end record flit_ext_axis_single_packed;
     
+    type flit_axis_quad_packed is record
+        data : std_logic_vector(DATA_QUAD_SIZE_IN_BYTES*8-1 downto 0);
+        dest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
+        user : std_logic_vector(PTYPE_SIZE_IN_BIT-1 downto 0);
+        last : std_logic;
+        valid : std_logic;
+    end record flit_axis_quad_packed;
+
+    type flit_ext_axis_quad_packed is record
+        data : std_logic_vector(DATA_QUAD_SIZE_IN_BYTES*8-1 downto 0);
+        dest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
+        user : std_logic_vector(TUSER_EXT_SIZE_IN_BIT-1 downto 0);
+        last : std_logic;
+        valid : std_logic;
+    end record flit_ext_axis_quad_packed;
 
     function is_hardend(PTYPE : std_logic_vector) return boolean;
-    function is_hardend(ARG : flit) return boolean;
-    function is_hardend(ARG : flit_ext) return boolean;
-    function extend_flit(ARG : flit) return flit_ext;
-    function reduce_flit(ARG : flit_ext) return flit;
-    function axis_to_flit(ARG : flit_axis_packed) return flit;
-    function axis_to_flit(ARG : flit_ext_axis_packed) return flit_ext;
+    function is_hardend(ARG : flit_single) return boolean;
+    function is_hardend(ARG : flit_quad) return boolean;
+    function extend_flit(ARG : flit_single) return flit_ext_single;
+    function extend_flit(ARG : flit_quad) return flit_ext_quad;
+    function reduce_flit(ARG : flit_ext_single) return flit_single;
+    function reduce_flit(ARG : flit_ext_quad) return flit_quad;
+    function axis_to_flit(ARG : flit_axis_single_packed) return flit_single;
+    function axis_to_flit(ARG : flit_ext_axis_single_packed) return flit_ext_single;
     function flit_to_axis(ARG : flit) return flit_axis_packed;
     function flit_to_axis(ARG : flit_ext) return flit_ext_axis_packed;
     function slv_to_flit(ARG : std_logic_vector) return flit;
@@ -99,52 +127,54 @@ package body core_pkg is
     begin
         return unsigned(PTYPE) > 2;
     end;
-    function is_hardend(ARG : flit) return boolean is
+    function is_hardend(ARG : flit_single) return boolean is
     begin
         return is_hardend(ARG.ptype);
     end;
-    function is_hardend(ARG : flit_ext) return boolean is
+    function is_hardend(ARG : flit_quad) return boolean is
     begin
         return is_hardend(ARG.ptype);
     end;
     
-    function extend_flit(ARG : flit) return flit_ext is
-        variable result : flit_ext(tuples(ARG.tuples'RANGE));
+    function extend_flit(ARG : flit_single) return flit_ext_single is
+        variable result : flit_ext_single;
     begin
-        result.tuples := ARG.tuples;
-        result.cdest := ARG.cdest;
-        result.ptype := ARG.ptype;
-        result.yield := ARG.yield;
-        result.valid := ARG.valid;
+        result.base := ARG;
+        result.ldest := ARG.cdest(lDEST_SIZE_IN_BIT-1 downto 0);
+        
+        return result;
+    end;
+
+    function extend_flit(ARG : flit_quad) return flit_ext_quad is
+        variable result : flit_ext_quad;
+    begin
+        result.base := ARG;
         result.ldest := ARG.cdest(lDEST_SIZE_IN_BIT-1 downto 0);
         
         return result;
     end;
     
-    function reduce_flit(ARG : flit_ext) return flit is
-        variable result : flit;
+    function reduce_flit(ARG : flit_ext_single) return flit_single is
+        variable result : flit_single;
     begin
-        result.tuples := ARG.tuples;
-        result.cdest := ARG.cdest;
-        result.ptype := ARG.ptype;
-        result.yield := ARG.yield;
-        result.valid := ARG.valid;
-        
-        return result;
+        return ARG.base;
     end;
     
-    function axis_to_flit(ARG : flit_axis_packed) return flit is
-        constant tuple_cnt : natural := ARG.data'HIGH / (DATA_SINGLE_SIZE_IN_BYTES * 8);
-        variable result : flit;
+    function reduce_flit(ARG : flit_ext_quad) return flit_quad is
+        variable result : flit_single;
     begin
-        assert tuple_cnt = 1 OR tuple_cnt = 4 report "axis_to_flit: Only flits with 1 or 4 tuples should be used!" severity failure;
-        
+        return ARG.base;
+    end;
+    
+    function axis_to_flit(ARG : flit_axis_single_packed) return flit_single is
+        variable result : flit_single;
+    begin
         result.yield := ARG.last;
         result.cdest := ARG.dest;
         result.ptype := ARG.user;
         result.valid := ARG.valid;
         
-        for i in 0 to tuple_cnt-1 loop
+        for i in 0 to 0 loop
             result.tuples(i).data := ARG.data((i+1)*VALUE_SIZE_IN_BITS-1 downto i*VALUE_SIZE_IN_BITS);
             result.tuples(i).tag  := ARG.data((i+1)*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS)-1 downto i*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS));
         end loop;
@@ -152,11 +182,9 @@ package body core_pkg is
         return result;
     end;
     
-    function axis_to_flit(ARG : flit_ext_axis_packed) return flit_ext is
-        constant tuple_cnt : natural := ARG.data'HIGH / (DATA_SINGLE_SIZE_IN_BYTES * 8);
+    function axis_to_flit(ARG : flit_ext_axis_single_packed) return flit_ext_single is
         variable result : flit_ext;
     begin
-        assert tuple_cnt = 1 OR tuple_cnt = 4 report "axis_to_flit: Only flits with 1 or 4 tuples should be used!" severity failure;
         
         result.yield := ARG.last;
         result.cdest := ARG.dest;
@@ -164,7 +192,7 @@ package body core_pkg is
         result.valid := ARG.valid;
         result.ldest := ARG.user(LDEST_SIZE_IN_BIT-1 downto PTYPE_SIZE_IN_BIT);
         
-        for i in 0 to tuple_cnt-1 loop
+        for i in 0 to tuple_3 loop
             result.tuples(i).data := ARG.data((i+1)*VALUE_SIZE_IN_BITS-1 downto i*VALUE_SIZE_IN_BITS);
             result.tuples(i).tag  := ARG.data((i+1)*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS)-1 downto i*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS));
         end loop;

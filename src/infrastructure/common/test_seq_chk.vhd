@@ -45,7 +45,7 @@ begin
                     severity error;
                 end if;
                 
-                if to_integer(unsigned(stream_s.tuples(0).tag)) /= TEST_PAYLOAD then
+                if (to_integer(unsigned(stream_s.tuples(0).tag)) /= TEST_PAYLOAD) AND (to_integer(unsigned(stream_s.tuples(0).tag)) /= 0) then
                     slave_error_interrupt <= '1';
                     
                     report "axis_test_seq: Slave tag TDATA mismatch. Expected: "

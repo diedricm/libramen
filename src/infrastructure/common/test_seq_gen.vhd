@@ -9,7 +9,8 @@ library libramen;
     
 entity test_seq_gen is
 generic (
-    TDEST_VAL : natural := 0;
+    CDEST_VAL : natural := 0;
+    RANDOMIZE_CDEST : boolean := true;
     SEED : natural := 0;
     TEST_PAYLOAD : natural := 0
 );
@@ -31,11 +32,13 @@ architecture Behavioral of test_seq_gen is
 
     signal iterator_m : natural := 0;
     signal terminate_circuit : std_logic := '0';
+    
+    signal next_cdest : unsigned(CDEST_SIZE_IN_BIT-1 downto 0) := to_unsigned(CDEST_VAL, CDEST_SIZE_IN_BIT);
 begin
 
     stream_m.tuples(0).data <= std_logic_vector(to_unsigned(iterator_m, VALUE_SIZE_IN_BITS));
     stream_m.tuples(0).tag  <= std_logic_vector(to_unsigned(TEST_PAYLOAD, TAG_SIZE_IN_BITS)) when iterator_m /= 0 else (others => '0');
-    stream_m.cdest <= std_logic_vector(to_unsigned(TDEST_VAL, CDEST_SIZE_IN_BIT));
+    stream_m.cdest <= std_logic_vector(next_cdest) when RANDOMIZE_CDEST else std_logic_vector(to_unsigned(CDEST_VAL, CDEST_SIZE_IN_BIT));
     stream_m.yield <= '1' when is1(terminate_circuit) OR is1(rand_vec(23 downto 20)) else '0';
     stream_m.valid <= '1' when is1(active) else '0';
     stream_m.ptype <= TLAST_MASK_HARDEND_0INVALID when is1(terminate_circuit) else
@@ -58,6 +61,7 @@ begin
                     if is1(terminate_circuit) then
                         iterator_m <= 0;
                         terminate_circuit <= '0';
+                        next_cdest <= unsigned(rand_vec(CDEST_SIZE_IN_BIT+40 downto 41));
                     end if;
                     
                     if is1(rand_vec(6 downto 0)) then
