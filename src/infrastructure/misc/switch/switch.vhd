@@ -9,80 +9,90 @@ library libramen;
 entity switch is
 generic (
 	TUPPLE_COUNT : natural := 4;
-	INPORT_CNT   : natural := 8;
-	OUTPORT_CNT  : natural := 8;
-	CDEST_PARSE_LENGTH : natural := 3;
+	INPORT_CNT   : natural := 4;
+	OUTPORT_CNT  : natural := 4;
 	CDEST_PARSE_OFFSET : natural := 2;
-	CONNECTION_MATRIX : slv2D(INPORT_CNT-1 downto 0)(OUTPORT_CNT-1 downto 0) := (others => (others => '1'))
+	CONNECTION_MATRIX : slv(INPORT_CNT*OUTPORT_CNT-1 downto 0) := (others => '1')
 );
 Port (
 	clk : in std_logic;
 	rstn : in std_logic;
 
-	stream_s  : in flit_vec(INPORT_CNT-1 downto 0)(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_s : out std_logic_vector(INPORT_CNT-1 downto 0);
+    stream_s_tuples  : in tuple_vec(INPORT_CNT*TUPPLE_COUNT-1 downto 0);
+	stream_s_status  : in stream_status_vec(INPORT_CNT-1 downto 0);
+	stream_s_ready   : out std_logic_vector(INPORT_CNT-1 downto 0);
 	
-	stream_m  : out flit_vec(OUTPORT_CNT-1 downto 0)(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_m : in std_logic_vector(OUTPORT_CNT-1 downto 0)
+	stream_m_tuples  : out tuple_vec(OUTPORT_CNT*TUPPLE_COUNT-1 downto 0);
+	stream_m_status  : out stream_status_vec(OUTPORT_CNT-1 downto 0);
+	stream_m_ready : in std_logic_vector(OUTPORT_CNT-1 downto 0)
 );
 end switch;
 
 architecture Behavioural of switch is
 	constant INPORT_CNT_LOG2  : natural := log2_nat(INPORT_CNT);
 	constant OUTPORT_CNT_LOG2 : natural := log2_nat(OUTPORT_CNT);
+	
+	subtype outport_id is unsigned(OUTPORT_CNT_LOG2-1 downto 0);
+	subtype inport_id is unsigned(INPORT_CNT_LOG2-1 downto 0);
+	type inport_id_vec is array (natural range <>) of inport_id;
 
-	signal outport_occupied  : std_logic_vector(OUTPORT_CNT-1 downto 0) := (others =>  '0');
-	signal forward_enabled   : slv2D(OUTPORT_CNT-1 downto 0)(INPORT_CNT_LOG2-1 downto 0) := (others => (others => '0'));
-
-	signal req_matrix : slv2D(INPORT_CNT-1 downto 0)(OUTPORT_CNT-1 downto 0) := (others => (others => '0'));
-	signal last_selected_port : slv2D(OUTPORT_CNT-1 downto 0)(INPORT_CNT_LOG2-1 downto 0) := (others => (others => '0'));
+    signal port_req_grp : slv(OUTPORT_CNT*INPORT_CNT-1 downto 0) := (others => '0');
+    signal output_ready : slv(OUTPORT_CNT*INPORT_CNT-1 downto 0) := (others => '0');
 begin
 
-	assert CDEST_PARSE_LENGTH = OUTPORT_CNT_LOG2 report "Switch  CDEST_PARSE_LENGTH does not match number of output ports!" severity failure;
-	assert (CDEST_PARSE_LENGTH + CDEST_PARSE_OFFSET) < CDEST_SIZE_IN_BIT report "Switch has exceeds CDEST_SIZE_IN_BIT limit during parsing" severity failure;
+    input_controll: for i in 0 to INPORT_CNT-1 generate
+        worker: entity libramen.switch_port_client
+        generic map (
+            TUPPLE_COUNT => TUPPLE_COUNT,
+            INPORT_CNT   => INPORT_CNT,
+            OUTPORT_CNT  => OUTPORT_CNT,
+            CDEST_PARSE_OFFSET => CDEST_PARSE_OFFSET,
+            CONNECTION_VECTOR => CONNECTION_MATRIX((i+1)*OUTPORT_CNT-1 downto i*OUTPORT_CNT)
+        ) port map (
+            clk => clk,
+            rstn => rstn,
+            
+            port_req => port_req_grp((i+1)*OUTPORT_CNT-1 downto i*OUTPORT_CNT),
+            
+            stream_s_tuples  => stream_s_tuples((i+1)*TUPPLE_COUNT-1 downto i*TUPPLE_COUNT),
+            stream_s_status  => stream_s_status(i),
+            stream_s_ready   => stream_s_ready(i),
+            
+            stream_m_ready   => output_ready((i+1)*OUTPORT_CNT-1 downto i*OUTPORT_CNT)
+        );
+	end generate;
 
-	main: process (clk)
-		variable next_selected_inport : unsigned(INPORT_CNT_LOG2-1 downto 0);
-        variable cdest_int : natural;
-	begin
-		if rising_edge(clk)  then
-			for i in 0 to OUTPORT_CNT-1 loop
-				stream_m(i) <=  stream_s(to_integer(unsigned(forward_enabled(i))));
-				if is0(outport_occupied) OR is1(stream_m(i).valid AND stream_m(i).yield AND ready_m) then
-					stream_m(i).valid <= '0';
-                    outport_occupied(i) <= '0';
-					for j in 0 to INPORT_CNT-1  loop
-						next_selected_inport := unsigned(last_selected_port(i)) + j + 1;
-						if is1(req_matrix(j)(to_integer(next_selected_inport))) then
-							forward_enabled(i) <= std_logic_vector(next_selected_inport);
-							outport_occupied(i) <= '1';
-						end if;
-					end loop;
-				end if;
-			end loop;
-			
-            for i in 0 to INPORT_CNT-1 loop
-                cdest_int := to_integer(unsigned(stream_s(i).cdest(CDEST_PARSE_LENGTH+CDEST_PARSE_OFFSET downto CDEST_PARSE_OFFSET)));
-                if (cdest_int < OUTPORT_CNT) AND is1(CONNECTION_MATRIX(i)(cdest_int)) AND is1(stream_s(i).valid) then
-                    req_matrix(i)(cdest_int) <= '1';
-                else
-                    req_matrix(i)(cdest_int) <= '0';
-                end if;  
-            end loop;
-		end if;
-	end process;
 
-	comb: process (ALL)
-	begin
+    output_arbiter: for i in 0 to OUTPORT_CNT-1 generate
+        signal ready_tmp : slv(INPORT_CNT-1 downto 0);
+        signal req_tmp : slv(INPORT_CNT-1 downto 0);
+    begin
+        portctr: entity libramen.switch_port_arbiter
+        generic map (
+            TUPPLE_COUNT => TUPPLE_COUNT,
+            INPORT_CNT   => INPORT_CNT,
+            OUTPORT_CNT  => OUTPORT_CNT
+        ) port map (
+            clk => clk,
+            rstn => rstn,
+            
+            port_req => req_tmp,
+            
+            stream_s_tuples  => stream_s_tuples,
+            stream_s_status  => stream_s_status,
+            stream_s_ready   => ready_tmp,
+            
+            stream_m_tuples  => stream_m_tuples((i+1)*TUPPLE_COUNT-1 downto i*TUPPLE_COUNT),
+            stream_m_status  => stream_m_status(i),
+            stream_m_ready => stream_m_ready(i)
+        );
         
-        ready_s <= (others => '0');
+        sig_shuffle: for j in 0 to  INPORT_CNT-1 generate
+            req_tmp(j) <= port_req_grp(j*OUTPORT_CNT+i);
+            output_ready(j*OUTPORT_CNT+i) <= ready_tmp(j);
+        end generate;
         
-        for i in 0 to OUTPORT_CNT-1 loop
-            if is1(outport_occupied(i)) then
-                ready_s(to_integer(unsigned(forward_enabled(i)))) <= ready_m(i);
-            end if;
-        end loop;
-
-	end process;
+	end generate;
+	
 
 end architecture ; -- Behavioural

@@ -37,17 +37,22 @@ Port (
     credits_list_out_input : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
     credits_list_out_output : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
 	
-    stream_core_s  : in flit_ext(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_core_s : out std_logic;
+    stream_core_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_core_s_status  : in stream_status;
+	stream_core_s_ready   : out std_logic;
+	stream_core_s_ldest   : in unsigned(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 
-    stream_core_m  : out flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_core_m : in std_logic;
+    stream_core_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_core_m_status  : out stream_status;
+	stream_core_m_ready   : in std_logic;
 
-    stream_ext_s  : in flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_ext_s : out std_logic;
-
-    stream_ext_m  : out flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_ext_m : in std_logic
+    stream_ext_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_ext_s_status  : in stream_status;
+	stream_ext_s_ready   : out std_logic;
+	
+    stream_ext_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_ext_m_status  : out stream_status;
+	stream_ext_m_ready   : in std_logic
 );
 end vaxis_round_robin_st_shell;
 
@@ -65,11 +70,14 @@ architecture Behavioral of vaxis_round_robin_st_shell is
     signal read_enable_out : std_logic;
     signal next_output_skip_prftchd_data_out : std_logic;
     
-    signal stream_regfilter : flit(tuples(TUPPLE_COUNT-1 downto 0));
-    signal ready_regfilter : std_logic;	
-
-    signal stream_destreplace : flit_ext(tuples(TUPPLE_COUNT-1 downto 0));
-    signal ready_destreplace : std_logic;
+    signal stream_regfilter_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
+    signal stream_regfilter_status  : stream_status;
+	signal stream_regfilter_ready   : std_logic;
+	
+    signal stream_regfilter_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
+    signal stream_regfilter_status  : stream_status;
+	signal stream_regfilter_ready   : std_logic;
+	signal stream_desreplace_ldest  : unsigned(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 begin
 
     credits_list_out_input <= credits_list_out_input_buffer;

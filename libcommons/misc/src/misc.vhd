@@ -7,7 +7,7 @@ library ieee;
 package misc is
     --PUBLIC MEMBERS
     alias slv is std_logic_vector;
-    type slv2D is array (natural range <>) of std_logic_vector;
+    type slv2D is array (natural range <>, natural range <>) of std_logic;
     
 	--Returns the ciel of the log base 2 of ARG
 	function log2_nat(ARG : natural) return natural;

@@ -35,312 +35,101 @@ package core_pkg is
     constant START_REG_ADDR : natural := 0;
     constant RETURN_DEST_REG_ADDR : natural := 1;
     constant FWD_DEST_REG_ADDR : natural := 2;
-
-    type tuple_t is record
-        data : std_logic_vector(VALUE_SIZE_IN_BITS-1 downto 0);
-        tag  : std_logic_vector(TAG_SIZE_IN_BITS-1 downto 0);
-    end record tuple_t;
-    type tuple_vec is array (natural range <>) of tuple_t;
-
-    type flit_single is record
-        tuples : tuple_vec(0 downto 0);
+    
+    type tuple is record
+        value : std_logic_vector(VALUE_SIZE_IN_BITS-1 downto 0);
+        tag : std_logic_vector(TAG_SIZE_IN_BITS-1 downto 0);
+    end record;
+    type tuple_vec is array (natural range <>) of tuple;
+    type tuple_vec2D is array (natural range <>, natural range <>) of tuple;
+    
+    type stream_status is record
+        valid : std_logic;
+        yield : std_logic;
         cdest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
         ptype : std_logic_vector(PTYPE_SIZE_IN_BIT-1 downto 0);
-        yield : std_logic;
-        valid : std_logic;
-    end record flit_single;
-    type flit_single_vec is array (natural range <>) of flit_single;
+    end record;
+    type stream_status_vec is array (natural range <>) of stream_status;
     
-    type flit_ext_single is record
-        base : flit_single;
-        ldest : std_logic_vector(LDEST_SIZE_IN_BIT-1 downto 0);
-    end record flit_ext_single;
-    type flit_ext_single_vec is array (natural range <>) of flit_ext_single;
-
-    type flit_quad is record
-        tuples : tuple_vec(3 downto 0);
-        cdest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
-        ptype : std_logic_vector(PTYPE_SIZE_IN_BIT-1 downto 0);
-        yield : std_logic;
-        valid : std_logic;
-    end record flit_quad;
-    type flit_quad_vec is array (natural range <>) of flit_quad;
+    function is_hardend(ARG : stream_status) return boolean;
+    function to_slv(TUPLES : tuple_vec; stream_status : stream_status) return std_logic_vector;
+    function get_tuples(ARG : std_logic_vector) return tuple_vec;
+    function get_stream_status(ARG : std_logic_vector) return stream_status;
     
-    type flit_ext_quad is record
-        base : flit_quad;
-        ldest : std_logic_vector(LDEST_SIZE_IN_BIT-1 downto 0);
-    end record flit_ext_quad;
-    type flit_ext_quad_vec is array (natural range <>) of flit_ext_quad;
-    
-    type flit_axis_single_packed is record
-        data : std_logic_vector(DATA_SINGLE_SIZE_IN_BYTES*8-1 downto 0);
-        dest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
-        user : std_logic_vector(PTYPE_SIZE_IN_BIT-1 downto 0);
-        last : std_logic;
-        valid : std_logic;
-    end record flit_axis_single_packed;
-
-    type flit_ext_axis_single_packed is record
-        data : std_logic_vector(DATA_SINGLE_SIZE_IN_BYTES*8-1 downto 0);
-        dest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
-        user : std_logic_vector(TUSER_EXT_SIZE_IN_BIT-1 downto 0);
-        last : std_logic;
-        valid : std_logic;
-    end record flit_ext_axis_single_packed;
-    
-    type flit_axis_quad_packed is record
-        data : std_logic_vector(DATA_QUAD_SIZE_IN_BYTES*8-1 downto 0);
-        dest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
-        user : std_logic_vector(PTYPE_SIZE_IN_BIT-1 downto 0);
-        last : std_logic;
-        valid : std_logic;
-    end record flit_axis_quad_packed;
-
-    type flit_ext_axis_quad_packed is record
-        data : std_logic_vector(DATA_QUAD_SIZE_IN_BYTES*8-1 downto 0);
-        dest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
-        user : std_logic_vector(TUSER_EXT_SIZE_IN_BIT-1 downto 0);
-        last : std_logic;
-        valid : std_logic;
-    end record flit_ext_axis_quad_packed;
-
-    function is_hardend(PTYPE : std_logic_vector) return boolean;
-    function is_hardend(ARG : flit_single) return boolean;
-    function is_hardend(ARG : flit_quad) return boolean;
-    function extend_flit(ARG : flit_single) return flit_ext_single;
-    function extend_flit(ARG : flit_quad) return flit_ext_quad;
-    function reduce_flit(ARG : flit_ext_single) return flit_single;
-    function reduce_flit(ARG : flit_ext_quad) return flit_quad;
-    function axis_to_flit(ARG : flit_axis_single_packed) return flit_single;
-    function axis_to_flit(ARG : flit_ext_axis_single_packed) return flit_ext_single;
-    function flit_to_axis(ARG : flit) return flit_axis_packed;
-    function flit_to_axis(ARG : flit_ext) return flit_ext_axis_packed;
-    function slv_to_flit(ARG : std_logic_vector) return flit;
-    function slv_to_flit_ext(ARG : std_logic_vector) return flit_ext;
-    function flit_to_slv(ARG : flit) return std_logic_vector;
-    function flit_to_slv(ARG : flit_ext) return std_logic_vector;
 end package core_pkg;
 
 package body core_pkg is
 
-    function is_hardend(PTYPE : std_logic_vector) return boolean is
+    function is_hardend(ARG : stream_status) return boolean is
     begin
-        return unsigned(PTYPE) > 2;
-    end;
-    function is_hardend(ARG : flit_single) return boolean is
-    begin
-        return is_hardend(ARG.ptype);
-    end;
-    function is_hardend(ARG : flit_quad) return boolean is
-    begin
-        return is_hardend(ARG.ptype);
+        return unsigned(ARG.ptype) > 2;
     end;
     
-    function extend_flit(ARG : flit_single) return flit_ext_single is
-        variable result : flit_ext_single;
+    function to_slv(TUPLES : tuple_vec; STREAM_STATUS : stream_status) return std_logic_vector is
+        variable result : std_logic_vector(TUPLES'HIGH*DATA_SINGLE_SIZE_IN_BYTES*8+CDEST_SIZE_IN_BIT+PTYPE_SIZE_IN_BIT+2-1 downto 0);
+        variable iterator : integer;
     begin
-        result.base := ARG;
-        result.ldest := ARG.cdest(lDEST_SIZE_IN_BIT-1 downto 0);
+        iterator := 0;
+        
+        result(iterator) := STREAM_STATUS.valid;
+        iterator := iterator + 1;
+        
+        result(iterator) := STREAM_STATUS.yield;
+        iterator := iterator + 1;
+        
+        result(CDEST_SIZE_IN_BIT+iterator-1 downto iterator) := STREAM_STATUS.cdest;
+        iterator := iterator + CDEST_SIZE_IN_BIT;
+        
+        result(PTYPE_SIZE_IN_BIT+iterator-1 downto iterator) := STREAM_STATUS.ptype;
+        iterator := iterator + PTYPE_SIZE_IN_BIT;
+        
+        for i in TUPLES'RANGE loop
+            result(VALUE_SIZE_IN_BITS+iterator-1 downto 0) := TUPLES(i).value;
+            iterator := iterator + VALUE_SIZE_IN_BITS;
+            
+            result(TAG_SIZE_IN_BITS+iterator-1 downto 0) := TUPLES(i).tag;
+            iterator := iterator + TAG_SIZE_IN_BITS;
+        end loop;
         
         return result;
     end;
 
-    function extend_flit(ARG : flit_quad) return flit_ext_quad is
-        variable result : flit_ext_quad;
-    begin
-        result.base := ARG;
-        result.ldest := ARG.cdest(lDEST_SIZE_IN_BIT-1 downto 0);
-        
-        return result;
-    end;
-    
-    function reduce_flit(ARG : flit_ext_single) return flit_single is
-        variable result : flit_single;
-    begin
-        return ARG.base;
-    end;
-    
-    function reduce_flit(ARG : flit_ext_quad) return flit_quad is
-        variable result : flit_single;
-    begin
-        return ARG.base;
-    end;
-    
-    function axis_to_flit(ARG : flit_axis_single_packed) return flit_single is
-        variable result : flit_single;
-    begin
-        result.yield := ARG.last;
-        result.cdest := ARG.dest;
-        result.ptype := ARG.user;
-        result.valid := ARG.valid;
-        
-        for i in 0 to 0 loop
-            result.tuples(i).data := ARG.data((i+1)*VALUE_SIZE_IN_BITS-1 downto i*VALUE_SIZE_IN_BITS);
-            result.tuples(i).tag  := ARG.data((i+1)*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS)-1 downto i*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS));
-        end loop;
-        
-        return result;
-    end;
-    
-    function axis_to_flit(ARG : flit_ext_axis_single_packed) return flit_ext_single is
-        variable result : flit_ext;
+    function get_tuples(ARG : std_logic_vector) return tuple_vec is
+        constant TUPLE_CNT : integer := (ARG'HIGH - CDEST_SIZE_IN_BIT - PTYPE_SIZE_IN_BIT - 2)/(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS);
+        variable result : tuple_vec(TUPLE_CNT - 1 downto 0);
+        variable iterator : natural;
     begin
         
-        result.yield := ARG.last;
-        result.cdest := ARG.dest;
-        result.ptype := ARG.user(PTYPE_SIZE_IN_BIT-1 downto 0);
-        result.valid := ARG.valid;
-        result.ldest := ARG.user(LDEST_SIZE_IN_BIT-1 downto PTYPE_SIZE_IN_BIT);
+        iterator := - CDEST_SIZE_IN_BIT - PTYPE_SIZE_IN_BIT - 2;
         
-        for i in 0 to tuple_3 loop
-            result.tuples(i).data := ARG.data((i+1)*VALUE_SIZE_IN_BITS-1 downto i*VALUE_SIZE_IN_BITS);
-            result.tuples(i).tag  := ARG.data((i+1)*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS)-1 downto i*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS));
-        end loop;
-        
-        return result;
-    end;
-    
-    function flit_to_axis(ARG : flit) return flit_axis_packed is
-        constant tuple_cnt : natural := ARG.tuples'HIGH * (DATA_SINGLE_SIZE_IN_BYTES * 8);
-        variable result : flit_axis_packed;
-    begin
-        result.last := ARG.yield;
-        result.dest := ARG.cdest;
-        result.user(PTYPE_SIZE_IN_BIT-1 downto 0) := ARG.ptype;
-        result.valid := ARG.valid;
-        
-        for i in 0 to tuple_cnt-1 loop
-            result.data((i+1)*VALUE_SIZE_IN_BITS-1 downto i*VALUE_SIZE_IN_BITS) := ARG.tuples(i).data;
-            result.data((i+1)*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS)-1 downto i*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS))  := ARG.tuples(i).tag;
-        end loop;
-    end;
-    
-    function flit_to_axis(ARG : flit_ext) return flit_ext_axis_packed is
-        constant tuple_cnt : natural := ARG.tuples'HIGH * (DATA_SINGLE_SIZE_IN_BYTES * 8);
-        variable result : flit_ext_axis_packed;
-    begin
-        result.last := ARG.yield;
-        result.dest := ARG.cdest;
-        result.user(PTYPE_SIZE_IN_BIT-1 downto 0) := ARG.ptype;
-        result.valid := ARG.valid;
-        result.user(LDEST_SIZE_IN_BIT-1 downto PTYPE_SIZE_IN_BIT) := ARG.ldest;
-        
-        for i in 0 to tuple_cnt-1 loop
-            result.data((i+1)*VALUE_SIZE_IN_BITS-1 downto i*VALUE_SIZE_IN_BITS) := ARG.tuples(i).data;
-            result.data((i+1)*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS)-1 downto i*(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS))  := ARG.tuples(i).tag;
-        end loop;
-    end;
-    
-    function slv_to_flit(ARG : std_logic_vector) return flit is
-        constant result_length : natural := (ARG'HIGH-CDEST_SIZE_IN_BIT-PTYPE_SIZE_IN_BIT-1)/(DATA_SINGLE_SIZE_IN_BYTES*8);
-        variable result : flit(tuples(result_length-1 downto 0));
-        variable counter : natural;
-    begin
-        counter := 0;
-    
-        result.yield := ARG(counter);
-        counter := counter + 1;
-        
-        result.ptype := ARG(PTYPE_SIZE_IN_BIT+counter-1 downto counter);
-        counter := counter + PTYPE_SIZE_IN_BIT;
-        
-        result.cdest := ARG(CDEST_SIZE_IN_BIT+counter-1 downto counter);
-        counter := counter + CDEST_SIZE_IN_BIT;
-        
-        for i in result.tuples'RANGE loop
-            result.tuples(i).data :=ARG(VALUE_SIZE_IN_BITS+counter-1 downto counter);
-            counter := counter + VALUE_SIZE_IN_BITS;
+        for i in result'RANGE loop
+            result(i).value := ARG(VALUE_SIZE_IN_BITS+iterator-1 downto 0);
+            iterator := iterator + VALUE_SIZE_IN_BITS;
             
-            result.tuples(i).tag :=ARG(TAG_SIZE_IN_BITS+counter-1 downto counter);
-            counter := counter + TAG_SIZE_IN_BITS;
+            result(i).tag := ARG(TAG_SIZE_IN_BITS+iterator-1 downto 0);
+            iterator := iterator + TAG_SIZE_IN_BITS;
         end loop;
         
         return result;
     end;
     
-    function slv_to_flit_ext(ARG : std_logic_vector) return flit_ext is
-        constant result_length : natural := (ARG'HIGH-CDEST_SIZE_IN_BIT-PTYPE_SIZE_IN_BIT-1)/(DATA_SINGLE_SIZE_IN_BYTES*8);
-        variable result : flit_ext(tuples(result_length-1 downto 0));
-        variable counter : natural;
+    function get_stream_status(ARG : std_logic_vector) return stream_status is
+        variable result : stream_status;
+        variable iterator : integer;
     begin
-        counter := 0;
-    
-        result.yield := ARG(counter);
-        counter := counter + 1;
+        iterator := 0;
         
-        result.ptype := ARG(PTYPE_SIZE_IN_BIT+counter-1 downto counter);
-        counter := counter + PTYPE_SIZE_IN_BIT;
+        result.valid := ARG(iterator);
+        iterator := iterator + 1;
         
-        result.cdest := ARG(CDEST_SIZE_IN_BIT+counter-1 downto counter);
-        counter := counter + CDEST_SIZE_IN_BIT;
+        result.yield := ARG(iterator);
+        iterator := iterator + 1;
         
-        for i in result.tuples'RANGE loop
-            result.tuples(i).data :=ARG(VALUE_SIZE_IN_BITS+counter-1 downto counter);
-            counter := counter + VALUE_SIZE_IN_BITS;
-            
-            result.tuples(i).tag :=ARG(TAG_SIZE_IN_BITS+counter-1 downto counter);
-            counter := counter + TAG_SIZE_IN_BITS;
-        end loop;
+        result.cdest := ARG(CDEST_SIZE_IN_BIT+iterator-1 downto iterator);
+        iterator := iterator + CDEST_SIZE_IN_BIT;
         
-        result.ldest := ARG(LDEST_SIZE_IN_BIT+counter-1 downto counter);
-        counter := counter + LDEST_SIZE_IN_BIT;
-        
-        return result;
-    end;
-
-    function flit_to_slv(ARG : flit) return std_logic_vector is
-        constant result_length : natural := ARG.tuples'HIGH*DATA_SINGLE_SIZE_IN_BYTES*8+CDEST_SIZE_IN_BIT+PTYPE_SIZE_IN_BIT+1;
-        variable result : std_logic_vector(result_length-1 downto 0);
-        variable counter : natural;
-    begin
-        counter := 0;
-    
-        result(counter) := ARG.yield;
-        counter := counter + 1;
-        
-        result(PTYPE_SIZE_IN_BIT+counter-1 downto counter) :=ARG.ptype;
-        counter := counter + PTYPE_SIZE_IN_BIT;
-        
-        result(CDEST_SIZE_IN_BIT+counter-1 downto counter) :=ARG.cdest;
-        counter := counter + CDEST_SIZE_IN_BIT;
-        
-        for i in ARG.tuples'RANGE loop
-            result(VALUE_SIZE_IN_BITS+counter-1 downto counter) :=ARG.tuples(i).data;
-            counter := counter + VALUE_SIZE_IN_BITS;
-            
-            result(TAG_SIZE_IN_BITS+counter-1 downto counter) :=ARG.tuples(i).tag;
-            counter := counter + TAG_SIZE_IN_BITS;
-        end loop;
-        
-        return result;
-    end;
-    
-    function flit_to_slv(ARG : flit_ext) return std_logic_vector is
-        constant result_length : natural := ARG.tuples'HIGH*DATA_SINGLE_SIZE_IN_BYTES*8+CDEST_SIZE_IN_BIT+PTYPE_SIZE_IN_BIT+LDEST_SIZE_IN_BIT+1;
-        variable result : std_logic_vector(result_length-1 downto 0);
-        variable counter : natural;
-    begin
-        counter := 0;
-    
-        result(counter) := ARG.yield;
-        counter := counter + 1;
-        
-        result(PTYPE_SIZE_IN_BIT+counter-1 downto counter) :=ARG.ptype;
-        counter := counter + PTYPE_SIZE_IN_BIT;
-        
-        result(CDEST_SIZE_IN_BIT+counter-1 downto counter) :=ARG.cdest;
-        counter := counter + CDEST_SIZE_IN_BIT;
-        
-        for i in ARG.tuples'RANGE loop
-            result(VALUE_SIZE_IN_BITS+counter-1 downto counter) :=ARG.tuples(i).data;
-            counter := counter + VALUE_SIZE_IN_BITS;
-            
-            result(TAG_SIZE_IN_BITS+counter-1 downto counter) :=ARG.tuples(i).tag;
-            counter := counter + TAG_SIZE_IN_BITS;
-        end loop;
-        
-        result(LDEST_SIZE_IN_BIT+counter-1 downto counter) := ARG.ldest;
-        counter := counter + LDEST_SIZE_IN_BIT;
+        result.ptype := ARG(PTYPE_SIZE_IN_BIT+iterator-1 downto iterator);
+        iterator := iterator + PTYPE_SIZE_IN_BIT;
         
         return result;
     end;

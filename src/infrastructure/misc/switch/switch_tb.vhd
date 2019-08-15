@@ -11,36 +11,44 @@ end switch_tb;
 
 architecture Behavioral of switch_tb is
     constant clk_freq : time := 2ns;
-    constant port_cnt : natural := 4;
-    signal clk : std_logic := '0';
+    constant port_cnt_input : natural := 5;
+    constant port_cnt_output : natural := 4;
+    signal clk : std_logic := '1';
     signal rstn : std_logic := '0';
-    
-    signal stream_s  :  flit_vec(port_cnt-1 downto 0)(tuples(0 downto 0));
-    signal ready_s   : std_logic_vector(port_cnt-1 downto 0);
         
-    signal stream_m  : flit_vec(port_cnt-1 downto 0)(tuples(0 downto 0));
-    signal ready_m   : std_logic_vector(port_cnt-1 downto 0);
+    signal stream_s_tuples : tuple_vec(port_cnt_input-1 downto 0);
+    signal stream_s_status : stream_status_vec(port_cnt_input-1 downto 0);
+    signal stream_s_ready  : std_logic_vector(port_cnt_input-1 downto 0);
+    
+    signal stream_m_tuples : tuple_vec(port_cnt_output-1 downto 0);
+    signal stream_m_status : stream_status_vec(port_cnt_output-1 downto 0);
+    signal stream_m_ready  : std_logic_vector(port_cnt_output-1 downto 0);
 begin
 
-    generators: for i in 0 to port_cnt-1 generate
+    clk <= NOT clk after clk_freq/2;
+    rstn <= '1' after clk_freq*50;
+
+    generators: for i in 0 to port_cnt_input-1 generate
         gen_instance: entity libramen.test_seq_gen
         generic map (
-            CDEST_VAL => i,
-            RANDOMIZE_CDEST => true,
+            CDEST_VAL => i MOD 4,
+            RANDOMIZE_CDEST => false,
             SEED => i,
-            TEST_PAYLOAD => 0
+            TEST_PAYLOAD => 0,
+            RANDOM_YIELDS => false
         ) port map (
             clk => clk,
             rstn => rstn,
             
             active => '1',
             
-            stream_m => stream_s(i),
-            ready_m => ready_s(i)
+            stream_m_tuples(0) => stream_s_tuples(i),
+            stream_m_status => stream_s_status(i),
+            stream_m_ready => stream_s_ready(i)
         );
     end generate;
     
-    consumers: for i in 0 to port_cnt-1 generate
+    consumers: for i in 0 to port_cnt_output-1 generate
         cons_instance: entity libramen.test_seq_chk
         generic map (
             TEST_PAYLOAD => 0
@@ -50,28 +58,30 @@ begin
             
             slave_error_interrupt => OPEN,
             
-            stream_s => stream_m(i),
-            ready_s => ready_m(i)
+            stream_s_tuples(0) => stream_m_tuples(i),
+            stream_s_status => stream_m_status(i),
+            stream_s_ready => stream_m_ready(i)
         );
     end generate;
 
     uut: entity libramen.switch
     generic map (
         TUPPLE_COUNT => 1,
-        INPORT_CNT   => port_cnt,
-        OUTPORT_CNT  => port_cnt,
-        CDEST_PARSE_LENGTH => 2,
+        INPORT_CNT   => port_cnt_input,
+        OUTPORT_CNT  => port_cnt_output,
         CDEST_PARSE_OFFSET => 0,
-        CONNECTION_MATRIX => (others => (others => '1'))
+        CONNECTION_MATRIX => (others => '1')
     ) port map (
         clk => clk,
         rstn => rstn,
         
-        stream_s  => stream_s,
-        ready_s => ready_s,
+        stream_s_tuples => stream_s_tuples,
+        stream_s_status => stream_s_status,
+        stream_s_ready => stream_s_ready,
         
-        stream_m  => stream_m,
-        ready_m => ready_m
+        stream_m_tuples => stream_m_tuples,
+        stream_m_status => stream_m_status,
+        stream_m_ready => stream_m_ready
     );
-
+    
 end architecture; --Behavioral
