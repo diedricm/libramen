@@ -20,17 +20,23 @@ Port (
 	ap_clk : in std_logic;
 	rst_n : in std_logic;
 	
-    stream_core_s  : in flit_ext(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_core_s : out std_logic;
+    stream_core_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_core_s_status  : in stream_status;
+	stream_core_s_ready   : out std_logic;
+	stream_core_s_ldest   : in slv(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 
-    stream_core_m  : out flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_core_m : in std_logic;
+    stream_core_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_core_m_status  : out stream_status;
+	stream_core_m_ready   : in std_logic;
 
-    stream_ext_s  : in flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_ext_s : out std_logic;
-
-    stream_ext_m  : out flit_ext(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_ext_m : in std_logic
+    stream_ext_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_ext_s_status  : in stream_status;
+	stream_ext_s_ready   : out std_logic;
+	
+    stream_ext_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_ext_m_status  : out stream_status;
+	stream_ext_m_ready   : in std_logic;
+	stream_ext_m_ldest   : out slv(VIRTUAL_PORT_CNT_LOG2-1 downto 0)
 );
 end regoffload_dest_reply;
 
@@ -55,44 +61,44 @@ architecture Behavioral of regoffload_dest_reply is
     signal replaced_tdest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
 begin
 
-    curr_input_chan <= unsigned(stream_ext_s.cdest(VIRTUAL_PORT_CNT_LOG2-1 downto 0));
+    curr_input_chan <= unsigned(stream_ext_s_status.cdest(VIRTUAL_PORT_CNT_LOG2-1 downto 0));
     curr_input_active <= chan_active(to_integer(curr_input_chan));
-    curr_input_reg_addr <= unsigned(stream_ext_s.tuples(0).tag);
+    curr_input_reg_addr <= unsigned(stream_ext_s_tuples(0).tag);
     
-    stream_core_m.tuples <= stream_ext_s.tuples;
-    stream_core_m.cdest <= stream_ext_s.cdest;
-    stream_core_m.ptype <= stream_ext_s.ptype;
-    stream_core_m.yield <= stream_ext_s.yield;
-    stream_core_m.valid<= stream_ext_s.valid when is1(curr_input_active)
+    stream_core_m_tuples <= stream_ext_s_tuples;
+    stream_core_m_status.cdest <= stream_ext_s_status.cdest;
+    stream_core_m_status.ptype <= stream_ext_s_status.ptype;
+    stream_core_m_status.yield <= stream_ext_s_status.yield;
+    stream_core_m_status.valid<= stream_ext_s_status.valid when is1(curr_input_active)
                                              OR (curr_input_reg_addr > 2)
                                              OR (NOT(OFFLOAD_DEST_REPLACEMENT) AND (curr_input_reg_addr > 1))
                                              OR (NOT(OFFLOAD_RETURN_HANDLING) AND (curr_input_reg_addr /= 2))
                                              OR (NOT(OFFLOAD_RETURN_HANDLING) AND NOT (OFFLOAD_DEST_REPLACEMENT)) else '0';
-    ready_ext_s <= ready_core_m;
+    stream_ext_s_ready <= stream_core_m_ready;
     
     regfilter: process (ap_clk)
     begin
         if rising_edge(ap_clk) then
-            if is1(rst_n AND stream_ext_s.valid AND ready_ext_s) then
+            if is1(rst_n AND stream_ext_s_status.valid AND stream_ext_s_ready) then
                 assert NOT(OFFLOAD_DEST_REPLACEMENT) OR OFFLOAD_RETURN_HANDLING report "If OFFLOAD_DEST_REPLACEMENT is enabled, then OFFLOAD_RETURN_HANDLING must be too!" severity failure;
-                assert is1(curr_input_active) OR (stream_ext_s.ptype = TLAST_MASK_HARDEND_3INVALID) report "Register accesses must hard end circuit after first tuple!" severity failure;
+                assert is1(curr_input_active) OR (stream_ext_s_status.ptype = TLAST_MASK_HARDEND_3INVALID) report "Register accesses must hard end circuit after first tuple!" severity failure;
             
                 case to_integer(curr_input_reg_addr) is
                 
                     when START_REG_ADDR         =>  if is0(curr_input_active) then
                                                         chan_active(to_integer(curr_input_chan)) <= '1';
-                                                        return_cookie_mem(to_integer(curr_input_chan)) <= stream_ext_s.tuples(0).data(8-1 downto 0);
+                                                        return_cookie_mem(to_integer(curr_input_chan)) <= stream_ext_s_tuples(0).value(8-1 downto 0);
                                                     end if;
                                                     
                     when RETURN_DEST_REG_ADDR   =>  if is0(curr_input_active) then
-                                                        return_addr_mem(to_integer(curr_input_chan)) <= stream_ext_s.tuples(0).data(CDEST_SIZE_IN_BIT-1 downto 0);
+                                                        return_addr_mem(to_integer(curr_input_chan)) <= stream_ext_s_tuples(0).value(CDEST_SIZE_IN_BIT-1 downto 0);
                                                     end if;
                                                     
                     when FWD_DEST_REG_ADDR      =>  if is0(curr_input_active) then
-                                                        destination_addr_mem(to_integer(curr_input_chan)) <= stream_ext_s.tuples(0).data(CDEST_SIZE_IN_BIT-1 downto 0);
+                                                        destination_addr_mem(to_integer(curr_input_chan)) <= stream_ext_s_tuples(0).value(CDEST_SIZE_IN_BIT-1 downto 0);
                                                     end if;
                                                     
-                    when others                 =>  if is1(curr_input_active) AND is_hardend(stream_ext_s) then
+                    when others                 =>  if is1(curr_input_active) AND is_hardend(stream_ext_s_status) then
                                                         chan_active(to_integer(curr_input_chan)) <= '0';
                                                     end if;
                 end case;
@@ -100,35 +106,35 @@ begin
         end if;
     end process;
     
-    replaced_tdest <= stream_core_s.cdest when NOT(OFFLOAD_DEST_REPLACEMENT) else destination_addr_mem(to_integer(unsigned(stream_core_s.ldest)));
+    replaced_tdest <= stream_core_s_status.cdest when NOT(OFFLOAD_DEST_REPLACEMENT) else destination_addr_mem(to_integer(unsigned(stream_core_s_ldest)));
     
     
-    stream_ext_m.tuples <= stream_core_s.tuples when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else return_data;
-    stream_ext_m.cdest <= replaced_tdest when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else return_addr;
-    stream_ext_m.ptype <= stream_core_s.ptype when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else TLAST_MASK_HARDEND_3INVALID;
-    stream_ext_m.yield <= stream_core_s.yield when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else '1';
-    stream_ext_m.valid <= stream_core_s.valid when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else '1';
-    stream_ext_m.ldest <= stream_core_s.ldest;
-    ready_core_s <= ready_ext_m when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else '0';
+    stream_ext_m_tuples <= stream_core_s_tuples when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else return_data;
+    stream_ext_m_status.cdest <= replaced_tdest when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else return_addr;
+    stream_ext_m_status.ptype <= stream_core_s_status.ptype when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else TLAST_MASK_HARDEND_3INVALID;
+    stream_ext_m_status.yield <= stream_core_s_status.yield when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else '1';
+    stream_ext_m_status.valid <= stream_core_s_status.valid when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else '1';
+    stream_ext_m_ldest <= stream_core_s_ldest;
+    stream_core_s_ready <= stream_ext_m_ready when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else '0';
     
     outputreplace: process (ap_clk)
         variable chan : integer;
     begin
         if rising_edge(ap_clk) then
             if is1(rst_n) then
-                chan := to_integer(unsigned(stream_core_s.ldest));
+                chan := to_integer(unsigned(stream_core_s_ldest));
                 if is0(send_return_frame) then
-                    if is_hardend(stream_core_s) AND is1(stream_ext_m.valid AND ready_ext_m) then
+                    if is_hardend(stream_core_s_status) AND is1(stream_ext_m_status.valid AND stream_ext_m_ready) then
                         send_return_frame <= '1';
                         for i in 0 to TUPPLE_COUNT-1 loop
-                            return_data(i).data <= (others => '0');
+                            return_data(i).value <= (others => '0');
                             return_data(i).tag <= (others => '0');
                         end loop;
-                        return_data(0).data(7 downto 0) <= return_cookie_mem(chan);
+                        return_data(0).value(7 downto 0) <= return_cookie_mem(chan);
                         return_addr <= return_addr_mem(chan);
                     end if;
                 else
-                    if is1(stream_ext_m.valid AND ready_ext_m) then
+                    if is1(stream_ext_m_status.valid AND stream_ext_m_ready) then
                         send_return_frame <= '0';
                     end if;
                 end if;

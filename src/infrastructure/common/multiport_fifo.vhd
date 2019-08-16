@@ -27,11 +27,15 @@ Port (
 	read_enable : in std_logic;
 	next_output_skip_prftchd_data : in std_logic;
 	
-	stream_s  : in flit_ext(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_s : out std_logic;
+	stream_s_tuples : in tuple_vec(TUPPLE_COUNT-1 downto 0);
+	stream_s_status : in stream_status;
+	stream_s_ready  : out std_logic;
+	stream_s_ldest  : in std_logic_vector(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 	
-	stream_m  : out flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_m : in std_logic
+	stream_m_tuples : out tuple_vec(TUPPLE_COUNT-1 downto 0);
+	stream_m_status : out stream_status;
+	stream_m_ready  : in std_logic;
+	stream_m_ldest  : out std_logic_vector(VIRTUAL_PORT_CNT_LOG2-1 downto 0)
 );
 end multiport_fifo;
 
@@ -53,7 +57,7 @@ architecture Behavioral of multiport_fifo is
         end if;
 	end;
 	
-	constant data_width_in_bits : natural := TUPPLE_COUNT*DATA_SINGLE_SIZE_IN_BYTES*8 + CDEST_SIZE_IN_BIT + PTYPE_SIZE_IN_BIT + 1;
+	constant data_width_in_bits : natural := TUPPLE_COUNT*DATA_SINGLE_SIZE_IN_BYTES*8 + CDEST_SIZE_IN_BIT + PTYPE_SIZE_IN_BIT + 2;
 	constant addr_width_in_bits : natural := VIRTUAL_PORT_CNT_LOG2 + MEMORY_DEPTH_LOG2;
     constant RAM_PIPELINE_DEPTH : natural := RAM_PIPELINE_DEPTH_lookup(MEMORY_TYPE);
 	
@@ -94,11 +98,18 @@ architecture Behavioral of multiport_fifo is
 	signal advance_read_pipeline : std_logic;
 begin
 
-    ready_s <= '1' when credits_list(to_integer(last_write_chan)) > 2 else '0';
-	stream_m.valid <= read_addr_delay_line(0).valid AND NOT(next_output_skip_prftchd_data);
-	stream_m <= slv_to_flit(read_data_out);
+    stream_s_ready <= '1' when credits_list(to_integer(last_write_chan)) > 2 else '0';
+    
+	stream_m_status.valid <= read_addr_delay_line(0).valid AND NOT(next_output_skip_prftchd_data);
+    stream_m_status.ptype <= get_stream_status(read_data_out).ptype;
+	stream_m_status.cdest <= get_stream_status(read_data_out).cdest;
+	stream_m_status.yield <= get_stream_status(read_data_out).yield;
+	
+	stream_m_tuples <= get_tuples(read_data_out);
+	
+	stream_m_ldest  <= std_logic_vector(read_addr_delay_line(RAM_PIPELINE_DEPTH-1).self_chan);
 
-    advance_read_pipeline <= ready_m OR NOT(read_addr_delay_line(0).valid);
+    advance_read_pipeline <= stream_m_ready OR NOT(read_addr_delay_line(0).valid);
 
 	read_port_proc: process(ap_clk)
 	   variable curr_read_chan : chan_id;
@@ -119,7 +130,7 @@ begin
                     read_addr_delay_line(RAM_PIPELINE_DEPTH-1).valid <= '0';
                     
                     -- ack succesful read
-                    if is1(stream_m.valid) then
+                    if is1(stream_m_status.valid) then
                         actual_read_ptr_list(to_integer(read_addr_delay_line(0).self_chan)) <= read_addr_delay_line(0).req_addr + 1;
                         read_credit_modified <= read_addr_delay_line(0).self_chan;
                         read_credit_modified_valid <= '1';
@@ -162,14 +173,14 @@ begin
             write_enable <= '0';
             almost_full <= '0';
             
-            if is1(stream_s.valid AND ready_s AND rst_n) then
-                flit_vaxis_dest := unsigned(stream_s.ldest);
+            if is1(stream_s_status.valid AND stream_s_ready AND rst_n) then
+                flit_vaxis_dest := unsigned(stream_s_ldest);
                 last_write_chan <= flit_vaxis_dest; 
                 
-                merged_data_write_lane <= flit_to_slv(reduce_flit(stream_s));
+                merged_data_write_lane <= to_slv(stream_s_tuples, stream_s_status);
                 merged_addr_write_lane <= std_logic_vector(flit_vaxis_dest) & std_logic_vector(write_ptr_list(to_integer(flit_vaxis_dest)));
                 
-                if NOT((stream_s.ptype = TLAST_MASK_SOFTEND_NO_DATA) OR (stream_s.ptype = TLAST_MASK_HARDEND_NO_DATA)) then
+                if NOT((stream_s_status.ptype = TLAST_MASK_SOFTEND_NO_DATA) OR (stream_s_status.ptype = TLAST_MASK_HARDEND_NO_DATA)) then
                     write_enable <= '1';
                     
                     write_ptr_list(to_integer(flit_vaxis_dest)) <= write_ptr_list(to_integer(flit_vaxis_dest)) + 1;

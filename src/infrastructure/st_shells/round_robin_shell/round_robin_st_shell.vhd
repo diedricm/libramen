@@ -7,7 +7,7 @@ library libcommons;
 library libramen;
     use libramen.core_pkg.ALL;
     
-entity vaxis_round_robin_st_shell is
+entity round_robin_st_shell is
 generic (
     --IO settings
 	TUPPLE_COUNT : natural := 4;
@@ -40,7 +40,7 @@ Port (
     stream_core_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
     stream_core_s_status  : in stream_status;
 	stream_core_s_ready   : out std_logic;
-	stream_core_s_ldest   : in unsigned(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
+	stream_core_s_ldest   : in slv(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 
     stream_core_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
     stream_core_m_status  : out stream_status;
@@ -54,9 +54,9 @@ Port (
     stream_ext_m_status  : out stream_status;
 	stream_ext_m_ready   : in std_logic
 );
-end vaxis_round_robin_st_shell;
+end round_robin_st_shell;
 
-architecture Behavioral of vaxis_round_robin_st_shell is
+architecture Behavioral of round_robin_st_shell is
     signal credits_list_out_input_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
     signal credits_list_out_output_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
 
@@ -74,10 +74,10 @@ architecture Behavioral of vaxis_round_robin_st_shell is
     signal stream_regfilter_status  : stream_status;
 	signal stream_regfilter_ready   : std_logic;
 	
-    signal stream_regfilter_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
-    signal stream_regfilter_status  : stream_status;
-	signal stream_regfilter_ready   : std_logic;
-	signal stream_desreplace_ldest  : unsigned(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
+    signal stream_destreplace_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
+    signal stream_destreplace_status  : stream_status;
+	signal stream_destreplace_ready   : std_logic;
+	signal stream_destreplace_ldest  : slv(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 begin
 
     credits_list_out_input <= credits_list_out_input_buffer;
@@ -93,17 +93,23 @@ begin
         ap_clk => ap_clk,
         rst_n => rst_n,
         
-        stream_core_s  => stream_core_s,
-        ready_core_s  => ready_core_s,
+        stream_core_s_tuples  => stream_core_s_tuples,
+        stream_core_s_status  => stream_core_s_status,
+        stream_core_s_ready   => stream_core_s_ready ,
+        stream_core_s_ldest   => stream_core_s_ldest ,
         
-        stream_core_m  => stream_core_m, 
-        ready_core_m => ready_core_m,
+        stream_core_m_tuples  => stream_core_m_tuples,
+        stream_core_m_status  => stream_core_m_status,
+        stream_core_m_ready   => stream_core_m_ready , 
         
-        stream_ext_s  => stream_regfilter,
-        ready_ext_s => ready_regfilter,
+        stream_ext_s_tuples  => stream_regfilter_tuples,
+        stream_ext_s_status  => stream_regfilter_status,
+        stream_ext_s_ready   => stream_regfilter_ready ,
         
-        stream_ext_m  => stream_destreplace,
-        ready_ext_m => ready_destreplace
+        stream_ext_m_tuples  => stream_destreplace_tuples,
+        stream_ext_m_status  => stream_destreplace_status,
+        stream_ext_m_ready   => stream_destreplace_ready ,
+        stream_ext_m_ldest   => stream_destreplace_ldest 
     );
 
     scheduler: entity libramen.roundrobin_scheduler
@@ -162,17 +168,22 @@ begin
         read_enable_out             => read_enable_out,
         next_output_skip_prftchd_data_out => next_output_skip_prftchd_data_out,
         
-        stream_core_s => stream_destreplace,
-        ready_core_s  => ready_destreplace,
+        stream_core_s_tuples => stream_destreplace_tuples,
+        stream_core_s_status => stream_destreplace_status,
+        stream_core_s_ready  => stream_destreplace_ready,
+        stream_core_s_ldest  => stream_destreplace_ldest,        
         
-        stream_core_m => stream_regfilter,
-        ready_core_m  => ready_regfilter,
+        stream_core_m_tuples => stream_regfilter_tuples,
+        stream_core_m_status => stream_regfilter_status,
+        stream_core_m_ready  => stream_regfilter_ready,
         
-        stream_ext_s => stream_ext_s,
-        ready_ext_s => ready_ext_s,
+        stream_ext_s_tuples => stream_ext_s_tuples,
+        stream_ext_s_status => stream_ext_s_status,
+        stream_ext_s_ready  => stream_ext_s_ready,
         
-        stream_ext_m => stream_ext_m,
-        ready_ext_m => ready_ext_m
+        stream_ext_m_tuples => stream_ext_m_tuples,
+        stream_ext_m_status => stream_ext_m_status,
+        stream_ext_m_ready  => stream_ext_m_ready
     );
 
 end Behavioral;

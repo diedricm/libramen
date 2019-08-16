@@ -38,27 +38,34 @@ Port (
     read_enable_out             : in std_logic;
     next_output_skip_prftchd_data_out : in std_logic;
 	
-    stream_core_s  : in flit_ext(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_core_s : out std_logic;
+    stream_core_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_core_s_status : in stream_status;
+	stream_core_s_ready : out std_logic;
+	stream_core_s_ldest : in slv(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 
-    stream_core_m  : out flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_core_m : in std_logic;
+    stream_core_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_core_m_status : out stream_status;
+	stream_core_m_ready : in std_logic;
 
-    stream_ext_s  : in flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_ext_s : out std_logic;
+    stream_ext_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_ext_s_status : in stream_status;
+	stream_ext_s_ready : out std_logic;
 
-    stream_ext_m  : out flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_ext_m : in std_logic
+    stream_ext_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_ext_m_status : out stream_status;
+	stream_ext_m_ready : in std_logic
 );
 end vaxis_multiport_fifo_fc;
 
 architecture Behavioral of vaxis_multiport_fifo_fc is
-    signal stream_fc_in  : flit(tuples(TUPPLE_COUNT-1 downto 0));
-    signal ready_fc_in : std_logic;
+    signal stream_fc_in_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
+    signal stream_fc_in_status : stream_status;
+    signal stream_fc_in_ready : std_logic;
 
-    signal stream_fc_out  : flit(tuples(TUPPLE_COUNT-1 downto 0));
-    signal ready_fc_out : std_logic;
-    
+    signal stream_fc_out_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
+    signal stream_fc_out_status : stream_status;
+    signal stream_fc_out_ready : std_logic;
+        
     signal almost_full  : std_logic;
     signal change_output_chan_req_out_1, change_output_chan_req_out_2 : std_logic;
 begin
@@ -76,11 +83,13 @@ begin
         
         trigger_backoff => almost_full,
     
-        stream_s => stream_ext_s,
-        ready_s => ready_ext_s,
+        stream_s_tuples => stream_ext_s_tuples,
+        stream_s_status => stream_ext_s_status,
+        stream_s_ready  => stream_ext_s_ready,
         
-        stream_m => stream_fc_in,
-        ready_m => ready_fc_in
+        stream_m_tuples => stream_fc_in_tuples,
+        stream_m_status => stream_fc_in_status,
+        stream_m_ready  => stream_fc_in_ready
     );
 
     input_fifo: entity libramen.multiport_fifo
@@ -103,11 +112,15 @@ begin
         read_enable => read_enable_inp,
         next_output_skip_prftchd_data => '0',
         
-        stream_s => extend_flit(stream_fc_in),
-        ready_s => ready_fc_in,
+        stream_s_tuples => stream_fc_in_tuples,
+        stream_s_status => stream_fc_in_status,
+        stream_s_ready  => stream_fc_in_ready,
+        stream_s_ldest  => stream_fc_in_status.cdest(VIRTUAL_PORT_CNT_LOG2-1 downto 0),
         
-        stream_m => stream_core_m,
-        ready_m => ready_core_m
+        stream_m_tuples => stream_core_m_tuples,
+        stream_m_status => stream_core_m_status,
+        stream_m_ready  => stream_core_m_ready,
+        stream_m_ldest  => OPEN
     );
     
     output_fifo: entity libramen.multiport_fifo
@@ -130,11 +143,15 @@ begin
         read_enable => read_enable_out,
         next_output_skip_prftchd_data => next_output_skip_prftchd_data_out,
         
-        stream_s => stream_core_s,
-        ready_s => ready_core_s,
+        stream_s_tuples => stream_core_s_tuples,
+        stream_s_status => stream_core_s_status,
+        stream_s_ready  => stream_core_s_ready,
+        stream_s_ldest  => stream_core_s_ldest,
         
-        stream_m => stream_fc_out,
-        ready_m => ready_fc_out
+        stream_m_tuples => stream_fc_out_tuples,
+        stream_m_status => stream_fc_out_status,
+        stream_m_ready  => stream_fc_out_ready,
+        stream_m_ldest  => OPEN
     );
     
     output_fc: entity libramen.vaxis_congestion_backoff
@@ -148,11 +165,13 @@ begin
     
         backoff => change_output_chan_req_out_2,
         
-        stream_s  => stream_fc_out,
-        ready_s => ready_fc_out,
-    
-        stream_m => stream_ext_m,
-        ready_m => ready_ext_m
+        stream_s_tuples => stream_fc_out_tuples,
+        stream_s_status => stream_fc_out_status,
+        stream_s_ready  => stream_fc_out_ready,
+        
+        stream_m_tuples => stream_ext_m_tuples,
+        stream_m_status => stream_ext_m_status,
+        stream_m_ready  => stream_ext_m_ready
     );
 
 end Behavioral;

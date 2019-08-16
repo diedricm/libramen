@@ -66,7 +66,7 @@ package body core_pkg is
     end;
     
     function to_slv(TUPLES : tuple_vec; STREAM_STATUS : stream_status) return std_logic_vector is
-        variable result : std_logic_vector(TUPLES'HIGH*DATA_SINGLE_SIZE_IN_BYTES*8+CDEST_SIZE_IN_BIT+PTYPE_SIZE_IN_BIT+2-1 downto 0);
+        variable result : std_logic_vector(TUPLES'LENGTH*DATA_SINGLE_SIZE_IN_BYTES*8+CDEST_SIZE_IN_BIT+PTYPE_SIZE_IN_BIT+2-1 downto 0);
         variable iterator : integer;
     begin
         iterator := 0;
@@ -83,11 +83,13 @@ package body core_pkg is
         result(PTYPE_SIZE_IN_BIT+iterator-1 downto iterator) := STREAM_STATUS.ptype;
         iterator := iterator + PTYPE_SIZE_IN_BIT;
         
+        --assert false report "Range: " & integer'IMAGE(result'LENGTH) severity failure;
+        
         for i in TUPLES'RANGE loop
-            result(VALUE_SIZE_IN_BITS+iterator-1 downto 0) := TUPLES(i).value;
+            result(VALUE_SIZE_IN_BITS+iterator-1 downto iterator) := TUPLES(i).value;
             iterator := iterator + VALUE_SIZE_IN_BITS;
             
-            result(TAG_SIZE_IN_BITS+iterator-1 downto 0) := TUPLES(i).tag;
+            result(TAG_SIZE_IN_BITS+iterator-1 downto iterator) := TUPLES(i).tag;
             iterator := iterator + TAG_SIZE_IN_BITS;
         end loop;
         
@@ -95,18 +97,18 @@ package body core_pkg is
     end;
 
     function get_tuples(ARG : std_logic_vector) return tuple_vec is
-        constant TUPLE_CNT : integer := (ARG'HIGH - CDEST_SIZE_IN_BIT - PTYPE_SIZE_IN_BIT - 2)/(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS);
+        constant TUPLE_CNT : integer := (ARG'LENGTH - CDEST_SIZE_IN_BIT - PTYPE_SIZE_IN_BIT - 2)/(VALUE_SIZE_IN_BITS+TAG_SIZE_IN_BITS);
         variable result : tuple_vec(TUPLE_CNT - 1 downto 0);
         variable iterator : natural;
     begin
         
-        iterator := - CDEST_SIZE_IN_BIT - PTYPE_SIZE_IN_BIT - 2;
+        iterator := CDEST_SIZE_IN_BIT + PTYPE_SIZE_IN_BIT + 2;
         
         for i in result'RANGE loop
-            result(i).value := ARG(VALUE_SIZE_IN_BITS+iterator-1 downto 0);
+            result(i).value := ARG(VALUE_SIZE_IN_BITS+iterator-1 downto iterator);
             iterator := iterator + VALUE_SIZE_IN_BITS;
             
-            result(i).tag := ARG(TAG_SIZE_IN_BITS+iterator-1 downto 0);
+            result(i).tag := ARG(TAG_SIZE_IN_BITS+iterator-1 downto iterator);
             iterator := iterator + TAG_SIZE_IN_BITS;
         end loop;
         

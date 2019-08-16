@@ -19,11 +19,13 @@ Port (
     
     trigger_backoff : in std_logic;
 
-	stream_s  : in flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_s : out std_logic;
+    stream_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_s_status : in stream_status;
+    stream_s_ready : out std_logic;
 	
-	stream_m  : out flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_m : in std_logic
+    stream_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_m_status : out stream_status;
+    stream_m_ready : in std_logic
 );
 end vaxis_congestion_feedback;
 
@@ -59,10 +61,9 @@ architecture Behavioral of vaxis_congestion_feedback is
 
     signal transmission_active : std_logic;
     
-    signal stream_reg : flit(tuples(TUPPLE_COUNT-1 downto 0));
-    signal ready_reg : std_logic;	
-    
-    signal stream_m_axi_enc : flit_axis_packed(data(TUPPLE_COUNT*DATA_SINGLE_SIZE_IN_BYTES-1 downto 0));
+    signal stream_reg_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
+    signal stream_reg_status : stream_status;
+    signal stream_reg_ready : std_logic;
 begin
 
     
@@ -97,35 +98,28 @@ begin
     end process;
     
     transmission_active <= '1' when (curr_state /= BLOCK_CIRCUIT) else '0';
-    stream_reg.valid <= stream_s.valid AND transmission_active;
-    ready_s <= ready_reg AND transmission_active;
-	stream_reg.tuples <= stream_s.tuples;
-	stream_reg.ptype <= stream_s.ptype;
-	stream_reg.yield <= '0';
-	stream_reg.cdest <= stream_s.cdest;
+    stream_reg_status.valid <= stream_s_status.valid AND transmission_active;
+    stream_s_ready <= stream_reg_ready AND transmission_active;
+	stream_reg_tuples <= stream_s_tuples;
+	stream_reg_status.ptype <= stream_s_status.ptype;
+	stream_reg_status.yield <= '0';
+	stream_reg_status.cdest <= stream_s_status.cdest;
 	
-    stream_m <= axis_to_flit(stream_m_axi_enc);
-    regslice: entity libramen.axis_register_slice
+    regslice: entity libramen.stream_register_slice 
     generic map (
-        TDATA_WIDTH => TUPPLE_COUNT*DATA_SINGLE_SIZE_IN_BYTES,
-        TDEST_WIDTH => CDEST_SIZE_IN_BIT,
-        TUSER_WIDTH => PTYPE_SIZE_IN_BIT
+        TUPPLE_COUNT => TUPPLE_COUNT
     ) port map (
         clk => clk,
         rstn => rstn,
-        
-        TDATA_s  => flit_to_axis(stream_reg).data,
-        TVALID_s => flit_to_axis(stream_reg).valid,
-        TREADY_s => ready_reg,
-        TDEST_s  => flit_to_axis(stream_reg).dest,
-        TUSER_s  => flit_to_axis(stream_reg).user,
-        TLAST_s  => flit_to_axis(stream_reg).last,
-        
-        TDATA_m  => stream_m_axi_enc.data,
-        TVALID_m => stream_m_axi_enc.valid,
-        TREADY_m => ready_m,
-        TDEST_m  => stream_m_axi_enc.dest,
-        TUSER_m  => stream_m_axi_enc.user,
-        TLAST_m  => stream_m_axi_enc.last
+
+        stream_s_tuples => stream_reg_tuples,
+        stream_s_status => stream_reg_status,
+        stream_s_ready => stream_reg_ready,
+        stream_s_ldest => (others => '-'),
+
+        stream_m_tuples => stream_m_tuples,
+        stream_m_status => stream_m_status,
+        stream_m_ready => stream_m_ready,
+        stream_m_ldest => OPEN
     );
 end Behavioral;

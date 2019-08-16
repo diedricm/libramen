@@ -18,11 +18,13 @@ Port (
 
 	backoff : out std_logic;
 	
-	stream_s  : in flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_s : out std_logic;
+    stream_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_s_status : in stream_status;
+    stream_s_ready : out std_logic;
 	
-	stream_m  : out flit(tuples(TUPPLE_COUNT-1 downto 0));
-	ready_m : in std_logic
+    stream_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
+    stream_m_status : out stream_status;
+    stream_m_ready : in std_logic
 );
 end vaxis_congestion_backoff;
 
@@ -61,10 +63,9 @@ architecture Behavioral of vaxis_congestion_backoff is
 	signal detection_counter : natural range 0 to BACKOFF_DETECTION_PERIOD;
 	signal probe_counter : natural range 0 to CIRCUIT_SETUP_PROBE_PERIOD;
 
-    signal stream_reg : flit(tuples(TUPPLE_COUNT-1 downto 0));
-    signal ready_reg : std_logic;
-    
-    signal stream_m_axi_enc : flit_axis_packed(data(TUPPLE_COUNT*DATA_SINGLE_SIZE_IN_BYTES-1 downto 0));
+    signal stream_reg_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
+    signal stream_reg_status : stream_status;
+    signal stream_reg_ready : std_logic;
 begin
 
 	counters: process (clk)
@@ -74,7 +75,7 @@ begin
 
 			if rstn = '1' then
 
-				if ready_reg = '1' then
+				if stream_reg_ready = '1' then
 					detection_counter <= BACKOFF_DETECTION_PERIOD;
 				else
 					if detection_counter /= 0 then
@@ -87,7 +88,7 @@ begin
 				end if;
 
 				if (curr_state = AWAIT_CONN_REQ) AND (next_state = PROBE_CIRCUIT_SETUP) then
-					circuit_destination <= stream_s.cdest;
+					circuit_destination <= stream_s_status.cdest;
 					probe_counter <= CIRCUIT_SETUP_PROBE_PERIOD;
 				end if;
 
@@ -100,12 +101,12 @@ begin
 		end if;
 	end process;
 
-	state_transition: process (curr_state, detection_counter, probe_counter, stream_s, circuit_destination)
+	state_transition: process (ALL)
 	begin
 		next_state <= curr_state;
 		case curr_state is
 			when AWAIT_CONN_REQ =>
-				if stream_s.valid = '1' then
+				if stream_s_status.valid = '1' then
 					next_state <= PROBE_CIRCUIT_SETUP;
 				end if;
 				
@@ -114,79 +115,72 @@ begin
 					next_state <= TERMINATE;
 				end if;
 
-				if (probe_counter = 0) AND (ready_reg = '1') then
+				if (probe_counter = 0) AND (stream_reg_ready = '1') then
 					next_state <= AWAIT_BACKOFF_SIGNAL;
 				end if;
 
 			when AWAIT_BACKOFF_SIGNAL => 
-				if (detection_counter = 0) OR (circuit_destination /= stream_s.cdest) then
+				if (detection_counter = 0) OR (circuit_destination /= stream_s_status.cdest) then
 					next_state <= TERMINATE;
 				end if;
 
 			when TERMINATE =>
-				if ready_reg = '1' then
+				if stream_reg_ready = '1' then
 					next_state <= AWAIT_CONN_REQ;
 				end if;
 
 		end case;
 	end process;
 
-	stream_mux: process (curr_state, stream_reg, stream_s, stream_m)
+	stream_mux: process (ALL)
 	begin
 		case curr_state is
 			when AWAIT_CONN_REQ =>
-				ready_s <= '0';
-				stream_reg.valid <= '0';
-				stream_reg.ptype <= TLAST_MASK_SOFTEND_NO_DATA;
-				stream_reg.yield <= '0';
+				stream_s_ready <= '0';
+				stream_reg_status.valid <= '0';
+				stream_reg_status.ptype <= TLAST_MASK_SOFTEND_NO_DATA;
+				stream_reg_status.yield <= '0';
 
 			when PROBE_CIRCUIT_SETUP =>
-				ready_s <= '0';
-				stream_reg.valid <= '1';
-				stream_reg.ptype <= TLAST_MASK_SOFTEND_NO_DATA;
-				stream_reg.yield <= '0';
+				stream_s_ready <= '0';
+				stream_reg_status.valid <= '1';
+				stream_reg_status.ptype <= TLAST_MASK_SOFTEND_NO_DATA;
+				stream_reg_status.yield <= '0';
 
 			when AWAIT_BACKOFF_SIGNAL => 
-				ready_s <= ready_m;
-				stream_reg.valid <= stream_s.valid;
-				stream_reg.ptype <= stream_s.ptype;
-				stream_reg.yield <= stream_s.yield;
+				stream_s_ready <= stream_m_ready;
+				stream_reg_status.valid <= stream_s_status.valid;
+				stream_reg_status.ptype <= stream_s_status.ptype;
+				stream_reg_status.yield <= stream_s_status.yield;
 
 			when TERMINATE =>
-				ready_s <= '0';
-				stream_reg.valid <= '1';
-				stream_reg.ptype <= TLAST_MASK_SOFTEND_NO_DATA;
-				stream_reg.yield <= '1';
+				stream_s_ready <= '0';
+				stream_reg_status.valid <= '1';
+				stream_reg_status.ptype <= TLAST_MASK_SOFTEND_NO_DATA;
+				stream_reg_status.yield <= '1';
 
 		end case;
 	end process;
 
-	stream_reg.cdest <= circuit_destination;
-	stream_reg.tuples <= stream_s.tuples;
+	stream_reg_status.cdest <= circuit_destination;
+	stream_reg_tuples <= stream_s_tuples;
     
-    stream_m <= axis_to_flit(stream_m_axi_enc);
-    regslice: entity libramen.axis_register_slice
+    regslice: entity libramen.stream_register_slice 
     generic map (
-        TDATA_WIDTH => TUPPLE_COUNT*DATA_SINGLE_SIZE_IN_BYTES,
-        TDEST_WIDTH => CDEST_SIZE_IN_BIT,
-        TUSER_WIDTH => PTYPE_SIZE_IN_BIT
+        TUPPLE_COUNT => TUPPLE_COUNT
     ) port map (
         clk => clk,
         rstn => rstn,
-        
-        TDATA_s  => flit_to_axis(stream_reg).data,
-        TVALID_s => flit_to_axis(stream_reg).valid,
-        TREADY_s => ready_reg,
-        TDEST_s  => flit_to_axis(stream_reg).dest,
-        TUSER_s  => flit_to_axis(stream_reg).user,
-        TLAST_s  => flit_to_axis(stream_reg).last,
-        
-        TDATA_m  => stream_m_axi_enc.data,
-        TVALID_m => stream_m_axi_enc.valid,
-        TREADY_m => ready_m,
-        TDEST_m  => stream_m_axi_enc.dest,
-        TUSER_m  => stream_m_axi_enc.user,
-        TLAST_m  => stream_m_axi_enc.last
+
+        stream_s_tuples => stream_reg_tuples,
+        stream_s_status => stream_reg_status,
+        stream_s_ready => stream_reg_ready,
+        stream_s_ldest => (others => '-'),
+
+        stream_m_tuples => stream_m_tuples,
+        stream_m_status => stream_m_status,
+        stream_m_ready => stream_m_ready,
+        stream_m_ldest => OPEN
     );
 
 end Behavioral;
