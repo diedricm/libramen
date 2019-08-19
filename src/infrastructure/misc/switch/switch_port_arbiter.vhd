@@ -35,14 +35,21 @@ architecture Behavioural of switch_port_arbiter is
 	subtype inport_id is unsigned(INPORT_CNT_LOG2-1 downto 0);
 	type inport_id_vec is array (natural range <>) of inport_id;
 
+	signal stream_reg_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
+	signal stream_reg_status  : stream_status;
+
 	signal outport_occupied  : std_logic := '0';
 	signal selected_input    : inport_id := (others => '0');
 begin
 
     comb: process (ALL)
-    begin
+    begin    
         stream_s_ready <= (others => '0'); 
         stream_s_ready(to_integer(selected_input)) <= stream_m_ready AND outport_occupied;
+        
+        stream_m_tuples <= stream_reg_tuples;
+        stream_m_status <= stream_reg_status;
+        stream_m_status.valid <= stream_reg_status.valid;
     end process;
 
     main: process (clk)
@@ -51,26 +58,35 @@ begin
     begin
         if rising_edge(clk)  then
             if is0(rstn) then
-                stream_m_status.valid <= '0';
+                stream_reg_status.valid <= '0';
             else
+                if is1(stream_m_ready AND stream_m_status.valid) then
+                    stream_reg_status.valid <= '0';
+                end if;
+            
                 --Mux Data
-                for k in 0 to TUPPLE_COUNT-1 loop
-                    stream_m_tuples(k) <= stream_s_tuples(to_integer(selected_input)*TUPPLE_COUNT+k);
-                end loop;
-                stream_m_status <= stream_s_status(to_integer(selected_input));
-                
-                if is1(stream_m_status.valid AND stream_m_status.yield AND stream_m_ready AND outport_occupied) then
-                    stream_m_status.valid <= '0';
-                    outport_occupied <= '0';
+                if (is1(stream_m_ready OR NOT(stream_m_status.valid))) AND is1(outport_occupied) then
+                    for k in 0 to TUPPLE_COUNT-1 loop
+                        stream_reg_tuples(k) <= stream_s_tuples(to_integer(selected_input)*TUPPLE_COUNT+k);
+                    end loop;
+                    stream_reg_status <= stream_s_status(to_integer(selected_input));
+                    
+                    if is1(stream_s_status(to_integer(selected_input)).yield) then
+                        outport_occupied <= '0';
+                    end if;
                 end if;
                 
                 --Select new inputs
                 if is0(outport_occupied) then
-                    for j in 0 to INPORT_CNT-1  loop
-                        test_inport_tmp := (selected_input + j) MOD INPORT_CNT;
+                    test_inport_tmp := selected_input;
+                    for j in 0 to INPORT_CNT-1 loop
                         if is1(port_req(to_integer(test_inport_tmp))) then
                             selected_input <= test_inport_tmp;
                             outport_occupied <= '1';
+                        end if;
+                        test_inport_tmp := test_inport_tmp + 1;
+                        if test_inport_tmp > INPORT_CNT-1 then
+                            test_inport_tmp := (others => '0');
                         end if;
                     end loop;
                 end if;

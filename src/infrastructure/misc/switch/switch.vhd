@@ -12,7 +12,7 @@ generic (
 	INPORT_CNT   : natural := 4;
 	OUTPORT_CNT  : natural := 4;
 	CDEST_PARSE_OFFSET : natural := 2;
-	CONNECTION_MATRIX : slv(INPORT_CNT*OUTPORT_CNT-1 downto 0) := (others => '1')
+	CONNECTION_MATRIX : slv(0 to INPORT_CNT*OUTPORT_CNT-1) := (others => '1')
 );
 Port (
 	clk : in std_logic;
@@ -47,7 +47,7 @@ begin
             INPORT_CNT   => INPORT_CNT,
             OUTPORT_CNT  => OUTPORT_CNT,
             CDEST_PARSE_OFFSET => CDEST_PARSE_OFFSET,
-            CONNECTION_VECTOR => CONNECTION_MATRIX((i+1)*OUTPORT_CNT-1 downto i*OUTPORT_CNT)
+            CONNECTION_VECTOR => CONNECTION_MATRIX(i*OUTPORT_CNT to (i+1)*OUTPORT_CNT-1)
         ) port map (
             clk => clk,
             rstn => rstn,

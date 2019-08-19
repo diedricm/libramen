@@ -28,9 +28,7 @@ Port (
     credits_list_out_input : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
     credits_list_out_output : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
 	
-    change_output_chan_req_inp  : out std_logic;
-    change_input_chan_req_out   : out std_logic;
-    change_output_chan_req_out  : out std_logic;
+    change_output_chan_req      : out std_logic;
     
     next_output_chan_inp        : in std_logic_vector(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
     read_enable_inp             : in std_logic;
@@ -67,10 +65,7 @@ architecture Behavioral of vaxis_multiport_fifo_fc is
     signal stream_fc_out_ready : std_logic;
         
     signal almost_full  : std_logic;
-    signal change_output_chan_req_out_1, change_output_chan_req_out_2 : std_logic;
 begin
-
-    change_output_chan_req_out <= change_output_chan_req_out_1 OR change_output_chan_req_out_2;
 
     input_fc: entity libramen.vaxis_congestion_feedback
     generic map (
@@ -106,7 +101,7 @@ begin
         credits_list_out => credits_list_out_input,
         
         almost_full => almost_full,
-        almost_empty => change_output_chan_req_inp,
+        almost_empty => OPEN,
         
         next_output_chan => next_output_chan_inp,
         read_enable => read_enable_inp,
@@ -136,8 +131,8 @@ begin
         
         credits_list_out => credits_list_out_output,
         
-        almost_full => change_input_chan_req_out,
-        almost_empty => change_output_chan_req_out_1,
+        almost_full => OPEN,
+        almost_empty => OPEN,
         
         next_output_chan => next_output_chan_out,
         read_enable => read_enable_out,
@@ -163,7 +158,7 @@ begin
         clk => ap_clk,
         rstn => rst_n,
     
-        backoff => change_output_chan_req_out_2,
+        backoff => change_output_chan_req,
         
         stream_s_tuples => stream_fc_out_tuples,
         stream_s_status => stream_fc_out_status,

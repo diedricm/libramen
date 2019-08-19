@@ -20,14 +20,14 @@ generic (
 	LFSR_INSTEAD_OF_SEQ_ORDER : boolean := true;
 	CREDIT_SENSITIVE_SCHEDULE : boolean := true;
 	
-	--IN/OUT fifo parameters
+	--IN/OUT fifo parameters  
     VIRTUAL_PORT_CNT_LOG2 : natural := 4;
-	MEMORY_DEPTH_LOG2_INPUT : natural := 2;
-	MEMORY_DEPTH_LOG2_OUTPUT : natural := 2;
-	ALMOST_FULL_LEVEL_INPUT : natural := 4;
-    ALMOST_FULL_LEVEL_OUTPUT : natural := 4;
-	MEMORY_TYPE_INPUT : string := "distributed";
-    MEMORY_TYPE_OUTPUT : string := "distributed"
+	MEMORY_DEPTH_LOG2_INPUT : natural := 6;
+	MEMORY_DEPTH_LOG2_OUTPUT : natural := 6;
+	ALMOST_FULL_LEVEL_INPUT : natural := 8;
+    ALMOST_FULL_LEVEL_OUTPUT : natural := 8;
+	MEMORY_TYPE_INPUT : string := "ultra";
+    MEMORY_TYPE_OUTPUT : string := "ultra"
 );
 Port (
 
@@ -60,9 +60,7 @@ architecture Behavioral of round_robin_st_shell is
     signal credits_list_out_input_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
     signal credits_list_out_output_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
 
-    signal change_output_chan_req_inp : std_logic;
-    signal change_input_chan_req_out : std_logic;
-    signal change_output_chan_req_out : std_logic;
+    signal change_output_chan_req : std_logic;
     
     signal next_output_chan_inp : std_logic_vector(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
     signal read_enable_inp : std_logic;
@@ -118,7 +116,8 @@ begin
         CREDIT_SENSITIVE_SCHEDULE => CREDIT_SENSITIVE_SCHEDULE, 
         VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2,
         MEMORY_DEPTH_LOG2_INPUT => MEMORY_DEPTH_LOG2_INPUT,
-        MEMORY_DEPTH_LOG2_OUTPUT => MEMORY_DEPTH_LOG2_OUTPUT
+        MEMORY_DEPTH_LOG2_OUTPUT => MEMORY_DEPTH_LOG2_OUTPUT,
+        MAX_CORE_PIPLINE_DEPTH => ALMOST_FULL_LEVEL_OUTPUT
     ) port map (
         clk => ap_clk,
         rst_n => rst_n,
@@ -126,10 +125,8 @@ begin
         credits_list_out_input  => credits_list_out_input_buffer,
         credits_list_out_output => credits_list_out_output_buffer,
 
-        change_output_chan_req_inp => change_output_chan_req_inp,
-        change_input_chan_req_out  => change_input_chan_req_out,
-        change_output_chan_req_out => change_output_chan_req_out,
-    
+        change_output_chan_req => change_output_chan_req,
+        
         next_output_chan_inp    => next_output_chan_inp,
         read_enable_inp         => read_enable_inp,
         next_output_chan_out    => next_output_chan_out,
@@ -158,9 +155,7 @@ begin
         credits_list_out_output => credits_list_out_output_buffer,
         
         
-        change_output_chan_req_inp  => change_output_chan_req_inp,
-        change_input_chan_req_out   => change_input_chan_req_out,
-        change_output_chan_req_out  => change_output_chan_req_out,
+        change_output_chan_req  => change_output_chan_req,
         
         next_output_chan_inp        => next_output_chan_inp,
         read_enable_inp             => read_enable_inp,

@@ -27,9 +27,9 @@ package core_pkg is
     constant TLAST_MASK_HARDEND_3INVALID : std_logic_vector := std_logic_vector(to_unsigned(7, PTYPE_SIZE_IN_BIT));
 
     constant DEFAULT_BACKOFF_DETECTION_PERIOD : natural := 3;
-    constant DEFAULT_BACKOFF_TIME : natural := 3;
-    constant DEFAULT_FIFO_ALMOST_FULL_LEVEL : natural := 4;
-    constant DEFAULT_CIRCUIT_SETUP_PROBE_PERIOD : natural := 3;
+    --constant DEFAULT_BACKOFF_TIME : natural := 3;
+    constant DEFAULT_FIFO_ALMOST_FULL_LEVEL : natural := 8;
+    constant DEFAULT_CIRCUIT_SETUP_PROBE_PERIOD : natural := 4;
     
     --Default register space
     constant START_REG_ADDR : natural := 0;
@@ -51,6 +51,7 @@ package core_pkg is
     end record;
     type stream_status_vec is array (natural range <>) of stream_status;
     
+    function contains_data(ARG : stream_status) return boolean;
     function is_hardend(ARG : stream_status) return boolean;
     function to_slv(TUPLES : tuple_vec; stream_status : stream_status) return std_logic_vector;
     function get_tuples(ARG : std_logic_vector) return tuple_vec;
@@ -59,6 +60,11 @@ package core_pkg is
 end package core_pkg;
 
 package body core_pkg is
+
+    function contains_data(ARG : stream_status) return boolean is
+    begin
+        return (ARG.ptype /= TLAST_MASK_SOFTEND_NO_DATA) AND (ARG.ptype /= TLAST_MASK_HARDEND_NO_DATA);
+    end;
 
     function is_hardend(ARG : stream_status) return boolean is
     begin

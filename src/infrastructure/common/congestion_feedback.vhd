@@ -97,7 +97,7 @@ begin
         end if;
     end process;
     
-    transmission_active <= '1' when (curr_state /= BLOCK_CIRCUIT) else '0';
+    transmission_active <= '1' when (curr_state /= BLOCK_CIRCUIT) AND NOT((trigger_backoff = '1') AND (curr_state = AWAIT_BACKOFF_REQ)) else '0';
     stream_reg_status.valid <= stream_s_status.valid AND transmission_active;
     stream_s_ready <= stream_reg_ready AND transmission_active;
 	stream_reg_tuples <= stream_s_tuples;
@@ -116,6 +116,8 @@ begin
         stream_s_status => stream_reg_status,
         stream_s_ready => stream_reg_ready,
         stream_s_ldest => (others => '-'),
+
+        clear => '0',
 
         stream_m_tuples => stream_m_tuples,
         stream_m_status => stream_m_status,

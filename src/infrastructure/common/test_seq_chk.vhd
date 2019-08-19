@@ -34,7 +34,7 @@ begin
         if rising_edge(clk) then
             slave_error_interrupt <= '0';
             
-            if (stream_s_status.valid = '1') then
+            if is1(stream_s_status.valid) AND contains_data(stream_s_status) then
                 iterator_s <= iterator_s + 1;
                 
                 if (to_integer(unsigned(stream_s_tuples(0).value)) /= iterator_s) AND (to_integer(unsigned(stream_s_tuples(0).tag)) /= 0) then

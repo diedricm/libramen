@@ -15,6 +15,9 @@ generic (
 Port (
     clk : in std_logic;
     rstn : in std_logic;
+    
+    clear : in std_logic;
+    is_empty : out std_logic;
 
     stream_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
     stream_s_status : in stream_status;
@@ -40,9 +43,11 @@ architecture Behavioral of stream_register_slice is
     signal stream_next_ldest : std_logic_vector(LDEST_LENGTH downto 0);
 begin
 
-    stream_m_tuples <= stream_s_tuples when is0(stream_reg_status.valid) else stream_reg_tuples;
-    stream_m_status <= stream_s_status when is0(stream_reg_status.valid) else stream_reg_status;
-    stream_m_ldest  <= stream_s_ldest when is0(stream_reg_status.valid) else stream_reg_ldest;
+    stream_next_tuples <= stream_s_tuples when is0(stream_reg_status.valid) else stream_reg_tuples;
+    stream_next_status <= stream_s_status when is0(stream_reg_status.valid) else stream_reg_status;
+    stream_next_ldest  <= stream_s_ldest when is0(stream_reg_status.valid) else stream_reg_ldest;
+    
+    is_empty <= '1' when is0(stream_m_status.valid) AND is0(stream_reg_status.valid) else '0';
     
     main: process (clk)
     begin
@@ -53,9 +58,9 @@ begin
                 stream_m_status.valid <= '0';
             else
                 
-                stream_s_ready <= stream_m_ready;
+                stream_s_ready <= (stream_m_ready OR NOT(stream_reg_status.valid));
                 
-                if is1(stream_m_ready) then
+                if is1(stream_m_ready OR NOT(stream_m_status.valid)) then
                     stream_m_tuples <= stream_next_tuples;
                     stream_m_status <= stream_next_status;
                     stream_m_ldest <= stream_next_ldest;
@@ -68,6 +73,13 @@ begin
                     stream_reg_tuples <= stream_s_tuples;
                     stream_reg_status <= stream_s_status;
                     stream_reg_ldest <= stream_s_ldest;
+                    stream_s_ready <= '0';
+                end if;
+               
+               if is1(clear) then
+                    stream_m_status.valid <= '0';
+                    stream_reg_status.valid <= '0';
+                    stream_s_ready <= '0';
                 end if;
                 
             end if;

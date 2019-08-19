@@ -57,9 +57,14 @@ architecture Behavioral of regoffload_dest_reply is
     signal send_return_frame : std_logic := '0';
     signal return_data : tuple_vec(TUPPLE_COUNT-1 downto 0);
     signal return_addr : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
+    signal return_chan : std_logic_vector(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
     
     signal replaced_tdest : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0);
+    
+    signal stream_ext_s_DEBUG_active : std_logic;
 begin
+
+    stream_ext_s_DEBUG_active <= ap_clk AND stream_ext_s_ready AND stream_ext_s_status.valid AND NOT(or_reduce(stream_ext_s_status.cdest));
 
     curr_input_chan <= unsigned(stream_ext_s_status.cdest(VIRTUAL_PORT_CNT_LOG2-1 downto 0));
     curr_input_active <= chan_active(to_integer(curr_input_chan));
@@ -114,7 +119,7 @@ begin
     stream_ext_m_status.ptype <= stream_core_s_status.ptype when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else TLAST_MASK_HARDEND_3INVALID;
     stream_ext_m_status.yield <= stream_core_s_status.yield when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else '1';
     stream_ext_m_status.valid <= stream_core_s_status.valid when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else '1';
-    stream_ext_m_ldest <= stream_core_s_ldest;
+    stream_ext_m_ldest <= stream_core_s_ldest when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else return_chan;
     stream_core_s_ready <= stream_ext_m_ready when (NOT(OFFLOAD_RETURN_HANDLING) OR is0(send_return_frame)) else '0';
     
     outputreplace: process (ap_clk)
@@ -132,6 +137,7 @@ begin
                         end loop;
                         return_data(0).value(7 downto 0) <= return_cookie_mem(chan);
                         return_addr <= return_addr_mem(chan);
+                        return_chan <= std_logic_vector(to_unsigned(chan, VIRTUAL_PORT_CNT_LOG2));
                     end if;
                 else
                     if is1(stream_ext_m_status.valid AND stream_ext_m_ready) then

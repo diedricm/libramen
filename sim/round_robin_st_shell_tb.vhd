@@ -15,15 +15,16 @@ architecture Behavioral of vaxis_round_robin_st_shell_tb is
 	constant TUPPLE_COUNT : natural := 4;
     constant OFFLOAD_DEST_REPLACEMENT : boolean := true;
 	constant OFFLOAD_RETURN_HANDLING : boolean := true;
-	constant LFSR_INSTEAD_OF_SEQ_ORDER : boolean := true;
+	constant LFSR_INSTEAD_OF_SEQ_ORDER : boolean := false;
 	constant CREDIT_SENSITIVE_SCHEDULE : boolean := true;
-    constant VIRTUAL_PORT_CNT_LOG2 : natural := 4;
-	constant MEMORY_DEPTH_LOG2_INPUT : natural := 2;
-	constant MEMORY_DEPTH_LOG2_OUTPUT : natural := 2;
-	constant ALMOST_FULL_LEVEL_INPUT : natural := 4;
-    constant ALMOST_FULL_LEVEL_OUTPUT : natural := 4;
-	constant MEMORY_TYPE_INPUT : string := "distributed";
-    constant MEMORY_TYPE_OUTPUT : string := "distributed";
+	constant MAX_CORE_PIPELINE_DEPTH : natural := 8;
+    constant VIRTUAL_PORT_CNT_LOG2 : natural := 2;
+	constant MEMORY_DEPTH_LOG2_INPUT : natural := 6;
+	constant MEMORY_DEPTH_LOG2_OUTPUT : natural := 6;
+	constant ALMOST_FULL_LEVEL_INPUT : natural := 8;
+    constant ALMOST_FULL_LEVEL_OUTPUT : natural := 8;
+	constant MEMORY_TYPE_INPUT : string := "block";
+    constant MEMORY_TYPE_OUTPUT : string := "block";
 
     constant SWITCH_PORT_CNT : natural := 6;
     constant DUMMY_PORTS : natural := 4;
@@ -70,12 +71,17 @@ begin
 
     rand_vec <= step(rand_spec, rand_vec) after clock_period;
 
+    stream_core_s_tuples <= stream_core_m_tuples;
+    stream_core_s_status <= stream_core_m_status;
+    stream_core_m_ready  <= stream_core_s_ready;
+    stream_core_s_ldest  <= stream_core_m_status.cdest(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
+
     system_setup: entity libramen.fixed_configuration_controller
     generic map (
-        INSTR_LIST => (0, 2, DUMMY_CONNECTION_VEC(0),
-                       1, 2, DUMMY_CONNECTION_VEC(1),
-                       2, 2, DUMMY_CONNECTION_VEC(2),
-                       3, 2, DUMMY_CONNECTION_VEC(3),
+        INSTR_LIST => (0, 2, DUMMY_CONNECTION_VEC(0)*16,
+                       1, 2, DUMMY_CONNECTION_VEC(1)*16,
+                       2, 2, DUMMY_CONNECTION_VEC(2)*16,
+                       3, 2, DUMMY_CONNECTION_VEC(3)*16,
                        0, 1, 5*16,
                        1, 1, 5*16,
                        2, 1, 5*16,
@@ -91,8 +97,13 @@ begin
         stream_m_ready  => sw_stream_s_ready(5)
     );
     sw_stream_s_blob(5).tuples(TUPPLE_COUNT-1 downto 1) <= (others => (others => (others => '0')));
+    sw_stream_m_ready(5) <= '1';
 
     producers: for i in 0 to DUMMY_PORTS-1 generate
+        signal stream_tmp_tuples  : tuple_vec(0 downto 0);
+        signal stream_tmp_status : stream_status;
+        signal stream_tmp_ready : std_logic;
+    begin
         producer_instance: entity libramen.test_seq_gen
         generic map (
             CDEST_VAL => i,
@@ -105,6 +116,26 @@ begin
             rstn => rst_n,
             
             active => activate_producers,
+            
+            stream_m_tuples(0) => stream_tmp_tuples(0),
+            stream_m_status => stream_tmp_status,
+            stream_m_ready  => stream_tmp_ready
+        );
+        
+        producer_fc: entity libramen.vaxis_congestion_backoff
+        generic map (
+            TUPPLE_COUNT => 1,
+            BACKOFF_DETECTION_PERIOD => DEFAULT_BACKOFF_DETECTION_PERIOD,
+            CIRCUIT_SETUP_PROBE_PERIOD => DEFAULT_CIRCUIT_SETUP_PROBE_PERIOD
+        ) port map (
+            clk => ap_clk,
+            rstn => rst_n,
+            
+            backoff => OPEN,
+            
+            stream_s_tuples(0)  => stream_tmp_tuples(0),
+            stream_s_status => stream_tmp_status,
+            stream_s_ready => stream_tmp_ready,
             
             stream_m_tuples(0) => sw_stream_s_blob(i+1).tuples(0),
             stream_m_status => sw_stream_s_blob(i+1).status,
@@ -134,7 +165,7 @@ begin
         TUPPLE_COUNT => TUPPLE_COUNT, 
         INPORT_CNT   => SWITCH_PORT_CNT,
         OUTPORT_CNT  => SWITCH_PORT_CNT,
-        CDEST_PARSE_OFFSET => 2,
+        CDEST_PARSE_OFFSET => 4,
         CONNECTION_MATRIX => ('1', '1', '1', '1', '1', '1',
                               '1', '0', '0', '0', '0', '0',
                               '1', '0', '0', '0', '0', '0',
@@ -188,6 +219,7 @@ begin
         CREDIT_SENSITIVE_SCHEDULE => CREDIT_SENSITIVE_SCHEDULE,
         
         --IN/OUT fifo parameters
+        MAX_CORE_PIPELINE_DEPTH => MAX_CORE_PIPELINE_DEPTH,
         VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2,
         MEMORY_DEPTH_LOG2_INPUT => MEMORY_DEPTH_LOG2_INPUT,
         MEMORY_DEPTH_LOG2_OUTPUT => MEMORY_DEPTH_LOG2_OUTPUT,

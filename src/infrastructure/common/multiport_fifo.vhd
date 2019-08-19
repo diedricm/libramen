@@ -50,7 +50,7 @@ architecture Behavioral of multiport_fifo is
         elsif memtype = "block" then
             return 3;
         elsif memtype = "ultra" then
-            return 3;
+            return 4;
         else
             report "Wrong MEMORY_TYPE: " & memtype & "! Use distributed, register, block or ultra." severity failure;
             return 0;
@@ -98,7 +98,7 @@ architecture Behavioral of multiport_fifo is
 	signal advance_read_pipeline : std_logic;
 begin
 
-    stream_s_ready <= '1' when credits_list(to_integer(last_write_chan)) > 2 else '0';
+    stream_s_ready <= '1' when credits_list(to_integer(last_write_chan)) > 3 else '0';
     
 	stream_m_status.valid <= read_addr_delay_line(0).valid AND NOT(next_output_skip_prftchd_data);
     stream_m_status.ptype <= get_stream_status(read_data_out).ptype;
@@ -119,7 +119,6 @@ begin
 		  if is1(rst_n) then
                 almost_empty <= '0';
                 read_credit_modified_valid <= '0';
-                
                 
                 if is1(advance_read_pipeline) then
                 
@@ -189,7 +188,8 @@ begin
                     write_credit_modified_valid <= '1';
                 end if;
                 
-                if (credits_list(to_integer(flit_vaxis_dest)) < ALMOST_FULL_LEVEL) AND is0(almost_full) then
+                --TODO the plus 3 is used to mitigate credit propagation delays. Dont judge me!
+                if (credits_list(to_integer(flit_vaxis_dest)) < (ALMOST_FULL_LEVEL + 3)) AND is0(almost_full) then
                     almost_full <= '1';
                 end if;
             

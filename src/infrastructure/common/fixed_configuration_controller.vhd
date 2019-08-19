@@ -39,7 +39,7 @@ architecture Behavioral of fixed_configuration_controller is
     constant INSTR_DESTREG_LIST : int_vec(INSTR_CNT-1 downto 0) := get_nth_value(INSTR_LIST, INSTR_CNT, 3, 1);
     constant INSTR_TRANSMIT_VAL : int_vec(INSTR_CNT-1 downto 0) := get_nth_value(INSTR_LIST, INSTR_CNT, 3, 2);
 
-    signal memindex : unsigned(log2_nat(INSTR_CDEST_LIST'HIGH)-1 downto 0) := (others => '0');
+    signal memindex : unsigned(log2_nat(INSTR_CDEST_LIST'HIGH) downto 0) := (others => '0');
     signal memindex_sanitized : natural;
 begin
     

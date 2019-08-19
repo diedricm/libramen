@@ -65,14 +65,14 @@ begin
                         
                     end if;
                     
+                    if is1(rand_vec(5 downto 0)) then
+                        terminate_circuit <= '1';
+                    end if;
+                    
                     if is1(terminate_circuit) then
                         iterator_m <= 0;
                         terminate_circuit <= '0';
                         next_cdest <= unsigned(rand_vec(CDEST_SIZE_IN_BIT+40 downto 41));
-                    end if;
-                    
-                    if is1(rand_vec(5 downto 0)) then
-                        terminate_circuit <= '1';
                     end if;
                 end if;
 

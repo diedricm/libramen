@@ -12,7 +12,7 @@ generic (
 	INPORT_CNT   : natural := 16;
 	OUTPORT_CNT  : natural := 16;
     CDEST_PARSE_OFFSET : natural := 2;
-    CONNECTION_VECTOR : slv(OUTPORT_CNT-1 downto 0) := (others => '1')
+    CONNECTION_VECTOR : slv(0 to OUTPORT_CNT-1) := (others => '1')
 );
 Port (
 	clk : in std_logic;
@@ -39,6 +39,7 @@ architecture Behavioural of switch_port_client is
     signal is_running : std_logic := '0';
     signal illegal_cdest_req : std_logic := '0';
     signal selected_port : outport_id := (others => '0');
+    signal terminate : std_logic;
 begin
 
     main: process (clk)
@@ -46,18 +47,14 @@ begin
     begin
         if rising_edge(clk) then
         
-            if is1(is_running) then
-                if is1(stream_s_status.valid AND stream_s_status.yield AND stream_s_ready) then
-                    is_running <= '0';
-                    illegal_cdest_req <= '0';
-                end if;
-            else
+            if is1(terminate) OR is0(is_running) then
+                is_running <= '0';
+                
                 if is1(stream_s_status.valid) then
-                    is_running <= '1';
-                    
                     next_port := unsigned(stream_s_status.cdest(OUTPORT_CNT_LOG2+CDEST_PARSE_OFFSET-1 downto CDEST_PARSE_OFFSET));
                     if next_port < OUTPORT_CNT AND is1(CONNECTION_VECTOR(to_integer(next_port))) then
                         selected_port <= next_port;
+                        is_running <= NOT(terminate);
                     else
                         illegal_cdest_req <= '1';
                         report "Illegal port reference!" severity error;
@@ -70,6 +67,8 @@ begin
 
     comb: process (ALL)
     begin
+        terminate <= stream_s_status.valid AND stream_s_status.yield AND stream_s_ready;
+    
         port_req <= (others => '0'); 
         port_req(to_integer(selected_port)) <= is_running AND NOT(illegal_cdest_req);
         
