@@ -11,7 +11,12 @@ generic (
 	TUPPLE_COUNT : natural := 4;
 	INPORT_CNT   : natural := 16;
 	OUTPORT_CNT  : natural := 16;
-    CDEST_PARSE_OFFSET : natural := 2;
+    CDEST_PARSE_OFFSET : natural := 4;
+    CDEST_PARSE_LENGTH : natural := 4;
+    GATEWAY_ADDR_OFFSET : natural := 8;
+	GATEWAY_ADDR_LENGTH : natural := 4;
+	SUBNET_IDENTITY     : natural := 0;
+	ENABLE_INTERNETWORK_ROUTING : boolean := true;
     CONNECTION_VECTOR : slv(0 to OUTPORT_CNT-1) := (others => '1')
 );
 Port (
@@ -40,10 +45,38 @@ architecture Behavioural of switch_port_client is
     signal illegal_cdest_req : std_logic := '0';
     signal selected_port : outport_id := (others => '0');
     signal terminate : std_logic;
+    
+    signal cdest_tmp : outport_id;
+    signal cdest_tmp_decode_valid : std_logic;
+    
+    signal local_addr : outport_id;
+    signal subnet_addr : unsigned(GATEWAY_ADDR_LENGTH-1 downto 0);
 begin
 
+    compute_cdest: process (ALL)
+    begin
+        local_addr <= to_unsigned(to_integer(unsigned(stream_s_status.cdest(CDEST_PARSE_LENGTH+CDEST_PARSE_OFFSET-1 downto CDEST_PARSE_OFFSET))), OUTPORT_CNT_LOG2);
+        subnet_addr <= unsigned(stream_s_status.cdest(GATEWAY_ADDR_LENGTH+GATEWAY_ADDR_OFFSET-1 downto GATEWAY_ADDR_OFFSET));
+        
+        cdest_tmp_decode_valid <= '0';
+        
+        if (ENABLE_INTERNETWORK_ROUTING)  then
+            if subnet_addr /= SUBNET_IDENTITY then
+                cdest_tmp <= (others => '0');
+                cdest_tmp_decode_valid <= '1';
+            else
+                cdest_tmp <= local_addr+1;
+            end if;
+        else
+            cdest_tmp <= local_addr;
+        end if;
+        
+        if cdest_tmp < OUTPORT_CNT AND is1(CONNECTION_VECTOR(to_integer(cdest_tmp))) then
+            cdest_tmp_decode_valid <= '1';
+        end if;        
+    end process;
+
     main: process (clk)
-        variable next_port : outport_id;
     begin
         if rising_edge(clk) then
         
@@ -51,9 +84,8 @@ begin
                 is_running <= '0';
                 
                 if is1(stream_s_status.valid) then
-                    next_port := unsigned(stream_s_status.cdest(OUTPORT_CNT_LOG2+CDEST_PARSE_OFFSET-1 downto CDEST_PARSE_OFFSET));
-                    if next_port < OUTPORT_CNT AND is1(CONNECTION_VECTOR(to_integer(next_port))) then
-                        selected_port <= next_port;
+                    if is1(cdest_tmp_decode_valid) then
+                        selected_port <= cdest_tmp;
                         is_running <= NOT(terminate);
                     else
                         illegal_cdest_req <= '1';

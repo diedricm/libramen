@@ -17,7 +17,6 @@ architecture Behavioral of vaxis_round_robin_st_shell_tb is
 	constant OFFLOAD_RETURN_HANDLING : boolean := true;
 	constant LFSR_INSTEAD_OF_SEQ_ORDER : boolean := false;
 	constant CREDIT_SENSITIVE_SCHEDULE : boolean := true;
-	constant MAX_CORE_PIPELINE_DEPTH : natural := 8;
     constant VIRTUAL_PORT_CNT_LOG2 : natural := 2;
 	constant MEMORY_DEPTH_LOG2_INPUT : natural := 6;
 	constant MEMORY_DEPTH_LOG2_OUTPUT : natural := 6;
@@ -28,7 +27,14 @@ architecture Behavioral of vaxis_round_robin_st_shell_tb is
 
     constant SWITCH_PORT_CNT : natural := 6;
     constant DUMMY_PORTS : natural := 4;
-    constant DUMMY_CONNECTION_VEC : int_vec(DUMMY_PORTS-1 downto 0) := (4,2,1,3); 
+    constant DUMMY_CONNECTION_VEC : int_vec(DUMMY_PORTS-1 downto 0) := (3,1,0,2); 
+
+	constant CDEST_PARSE_OFFSET : natural := 4;
+	constant CDEST_PARSE_LENGTH : natural := 4;
+	constant GATEWAY_ADDR_OFFSET : natural := 8;
+	constant GATEWAY_ADDR_LENGTH : natural := 4;
+	constant SUBNET_IDENTITY     : natural := 0;
+	constant ENABLE_INTERNETWORK_ROUTING : boolean := true;
     
     type sim_stream_group is record
         tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
@@ -78,14 +84,14 @@ begin
 
     system_setup: entity libramen.fixed_configuration_controller
     generic map (
-        INSTR_LIST => (0, 2, DUMMY_CONNECTION_VEC(0)*16,
-                       1, 2, DUMMY_CONNECTION_VEC(1)*16,
-                       2, 2, DUMMY_CONNECTION_VEC(2)*16,
-                       3, 2, DUMMY_CONNECTION_VEC(3)*16,
-                       0, 1, 5*16,
-                       1, 1, 5*16,
-                       2, 1, 5*16,
-                       3, 1, 5*16)   
+        INSTR_LIST => (256+0, 2, DUMMY_CONNECTION_VEC(0)*16,
+                       256+1, 2, DUMMY_CONNECTION_VEC(1)*16,
+                       256+2, 2, DUMMY_CONNECTION_VEC(2)*16,
+                       256+3, 2, DUMMY_CONNECTION_VEC(3)*16,
+                       256+0, 1, 4*16,
+                       256+1, 1, 4*16,
+                       256+2, 1, 4*16,
+                       256+3, 1, 4*16)   
     ) port map (
         ap_clk => ap_clk,
         rst_n => rst_n,
@@ -106,7 +112,7 @@ begin
     begin
         producer_instance: entity libramen.test_seq_gen
         generic map (
-            CDEST_VAL => i,
+            CDEST_VAL => 256+i,
             RANDOMIZE_CDEST => false,
             SEED => i,
             TEST_PAYLOAD => DUMMY_CONNECTION_VEC(i),
@@ -147,7 +153,7 @@ begin
     recievers:  for i in 0 to DUMMY_PORTS-1 generate
         reciever_instance: entity libramen.test_seq_chk
         generic map (
-            TEST_PAYLOAD => i+1
+            TEST_PAYLOAD => i
         ) port map (
             clk => ap_clk,
             rstn => rst_n,
@@ -165,7 +171,12 @@ begin
         TUPPLE_COUNT => TUPPLE_COUNT, 
         INPORT_CNT   => SWITCH_PORT_CNT,
         OUTPORT_CNT  => SWITCH_PORT_CNT,
-        CDEST_PARSE_OFFSET => 4,
+        CDEST_PARSE_OFFSET => CDEST_PARSE_OFFSET,
+        CDEST_PARSE_LENGTH => CDEST_PARSE_LENGTH,
+        GATEWAY_ADDR_OFFSET => GATEWAY_ADDR_OFFSET,
+        GATEWAY_ADDR_LENGTH => GATEWAY_ADDR_LENGTH,
+        SUBNET_IDENTITY     => SUBNET_IDENTITY,
+        ENABLE_INTERNETWORK_ROUTING => ENABLE_INTERNETWORK_ROUTING,
         CONNECTION_MATRIX => ('1', '1', '1', '1', '1', '1',
                               '1', '0', '0', '0', '0', '0',
                               '1', '0', '0', '0', '0', '0',
@@ -219,7 +230,6 @@ begin
         CREDIT_SENSITIVE_SCHEDULE => CREDIT_SENSITIVE_SCHEDULE,
         
         --IN/OUT fifo parameters
-        MAX_CORE_PIPELINE_DEPTH => MAX_CORE_PIPELINE_DEPTH,
         VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2,
         MEMORY_DEPTH_LOG2_INPUT => MEMORY_DEPTH_LOG2_INPUT,
         MEMORY_DEPTH_LOG2_OUTPUT => MEMORY_DEPTH_LOG2_OUTPUT,

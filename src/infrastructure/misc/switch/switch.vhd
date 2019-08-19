@@ -11,7 +11,12 @@ generic (
 	TUPPLE_COUNT : natural := 4;
 	INPORT_CNT   : natural := 4;
 	OUTPORT_CNT  : natural := 4;
-	CDEST_PARSE_OFFSET : natural := 2;
+	CDEST_PARSE_OFFSET : natural := 4;
+	CDEST_PARSE_LENGTH : natural := 4;
+	GATEWAY_ADDR_OFFSET : natural := 8;
+	GATEWAY_ADDR_LENGTH : natural := 4;
+	SUBNET_IDENTITY     : natural := 0;
+	ENABLE_INTERNETWORK_ROUTING : boolean := true;
 	CONNECTION_MATRIX : slv(0 to INPORT_CNT*OUTPORT_CNT-1) := (others => '1')
 );
 Port (
@@ -47,6 +52,11 @@ begin
             INPORT_CNT   => INPORT_CNT,
             OUTPORT_CNT  => OUTPORT_CNT,
             CDEST_PARSE_OFFSET => CDEST_PARSE_OFFSET,
+            CDEST_PARSE_LENGTH => CDEST_PARSE_LENGTH,
+            GATEWAY_ADDR_OFFSET => GATEWAY_ADDR_OFFSET,
+            GATEWAY_ADDR_LENGTH => GATEWAY_ADDR_LENGTH,
+            SUBNET_IDENTITY     => SUBNET_IDENTITY,
+            ENABLE_INTERNETWORK_ROUTING => ENABLE_INTERNETWORK_ROUTING,
             CONNECTION_VECTOR => CONNECTION_MATRIX(i*OUTPORT_CNT to (i+1)*OUTPORT_CNT-1)
         ) port map (
             clk => clk,
