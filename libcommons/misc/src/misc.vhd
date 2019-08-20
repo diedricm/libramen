@@ -32,6 +32,13 @@ package misc is
     function and_reduce(ARG : std_logic_vector) return std_logic;
     function or_reduce(ARG : std_logic_vector) return std_logic;
     
+    function min(A :  integer; B : integer) return integer;
+    function min(A :   signed; B : signed) return signed;
+    function min(A : unsigned; B : unsigned) return unsigned;
+    function max(A :  integer; B : integer) return integer;
+    function max(A :   signed; B : signed) return signed;
+    function max(A : unsigned; B : unsigned) return unsigned;
+    
     --Shorthands for handling binary numbers
     function slv2i(ARG : std_logic_vector) return integer;
     type integer_sign is (POS, NEG);
@@ -158,6 +165,61 @@ package body misc is
             return '1';
         end if;
     end;
+	
+	function min(A :  integer; B : integer) return integer is
+	begin
+        if A < B then 
+            return A;
+        else
+            return B;
+        end if;
+	end;
+	
+    function min(A :   signed; B : signed) return signed is
+	begin
+        if A < B then 
+            return A;
+        else
+            return B;
+        end if;	
+	end;
+	
+    function min(A : unsigned; B : unsigned) return unsigned is
+	begin
+        if A < B then 
+            return A;
+        else
+            return B;
+        end if;
+	end;
+	
+    function max(A :  integer; B : integer) return integer is
+	begin
+        if A < B then 
+            return A;
+        else
+            return B;
+        end if;
+	end;
+	
+    function max(A :   signed; B : signed) return signed is
+	begin
+        if A < B then 
+            return A;
+        else
+            return B;
+        end if;
+	end;
+	
+    function max(A : unsigned; B : unsigned) return unsigned is
+	begin
+        if A < B then 
+            return A;
+        else
+            return B;
+        end if;	
+	end;
+	
 	
 	function slv2i(ARG : std_logic_vector) return integer is
 	begin

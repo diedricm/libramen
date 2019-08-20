@@ -57,6 +57,8 @@ package core_pkg is
     function get_tuples(ARG : std_logic_vector) return tuple_vec;
     function get_stream_status(ARG : std_logic_vector) return stream_status;
     
+    function RAM_PIPELINE_DEPTH_lookup(memtype : string; OVERRIDE_DELAY_LENGTH : natural) return natural;
+    
 end package core_pkg;
 
 package body core_pkg is
@@ -141,5 +143,24 @@ package body core_pkg is
         
         return result;
     end;
+    
+    function RAM_PIPELINE_DEPTH_lookup(memtype : string; OVERRIDE_DELAY_LENGTH : natural) return natural is
+	begin
+        if OVERRIDE_DELAY_LENGTH /= 0 then
+            return OVERRIDE_DELAY_LENGTH;
+        end if;
+        if memtype = "distributed" then
+            return 2;
+        elsif memtype = "register" then
+            return 2;
+        elsif memtype = "block" then
+            return 3;
+        elsif memtype = "ultra" then
+            return 4;
+        else
+            report "Wrong MEMORY_TYPE: " & memtype & "! Use distributed, register, block or ultra." severity failure;
+            return 0;
+        end if;
+	end;
 
 end package body core_pkg;

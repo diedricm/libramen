@@ -12,7 +12,8 @@ generic (
 	VIRTUAL_PORT_CNT_LOG2 : natural := 4;
 	MEMORY_DEPTH_LOG2 : natural := 6;
 	ALMOST_FULL_LEVEL : natural := 8;
-	MEMORY_TYPE : string := "block"
+	MEMORY_TYPE : string := "block";
+	OVERRIDE_DELAY_LINE_LENGTH : natural := 0
 );
 Port (
 	ap_clk : in std_logic;
@@ -41,25 +42,9 @@ end multiport_fifo;
 
 architecture Behavioral of multiport_fifo is
 	
-	function RAM_PIPELINE_DEPTH_lookup(memtype : string) return natural is
-	begin
-        if memtype = "distributed" then
-            return 2;
-        elsif memtype = "register" then
-            return 2;
-        elsif memtype = "block" then
-            return 3;
-        elsif memtype = "ultra" then
-            return 4;
-        else
-            report "Wrong MEMORY_TYPE: " & memtype & "! Use distributed, register, block or ultra." severity failure;
-            return 0;
-        end if;
-	end;
-	
 	constant data_width_in_bits : natural := TUPPLE_COUNT*DATA_SINGLE_SIZE_IN_BYTES*8 + CDEST_SIZE_IN_BIT + PTYPE_SIZE_IN_BIT + 2;
 	constant addr_width_in_bits : natural := VIRTUAL_PORT_CNT_LOG2 + MEMORY_DEPTH_LOG2;
-    constant RAM_PIPELINE_DEPTH : natural := RAM_PIPELINE_DEPTH_lookup(MEMORY_TYPE);
+    constant RAM_PIPELINE_DEPTH : natural := RAM_PIPELINE_DEPTH_lookup(MEMORY_TYPE, OVERRIDE_DELAY_LINE_LENGTH);
 	
 	subtype mem_ptr is unsigned(MEMORY_DEPTH_LOG2-1 downto 0);
 	type mem_ptr_array is array (natural range <>) of mem_ptr;
@@ -207,10 +192,10 @@ begin
         end loop;
     end process;
 	
-    credit_adjust_proc: process(ap_clk)
+    credit_adjust_proc: process(ALL)
 	begin
-        if rising_edge(ap_clk) then
-            if is1(rst_n) then
+        --if rising_edge(ap_clk) then
+            --if is1(rst_n) then
                 -- adjust credit value if read chan == write chan
                 write_credit_modified_valid_final <= write_credit_modified_valid;
                 read_credit_modified_valid_final <= read_credit_modified_valid;
@@ -231,8 +216,8 @@ begin
                         credits_list(i) <= credits_list(i);
                     end if;
                 end loop;
-            end if;
-        end if;
+            --end if;
+        --end if;
     end process;
 	
     mem : entity libramen.xilinx_dual_port_ram 

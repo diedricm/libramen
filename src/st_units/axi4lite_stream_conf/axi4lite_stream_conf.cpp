@@ -1,14 +1,14 @@
 #include <ap_int.h>
 #include <ap_axi_sdata.h>
 #include <hls_stream.h>
-#include "vaxis.h"
+#include "libramen.h"
 
 void axi4lite_stream_conf(
 		unsigned instruction,
 		unsigned scalar,
 		unsigned long memptr,
-		hls::stream<vaxis_single> &in_stream,
-		hls::stream<vaxis_single> &out_stream
+		hls::stream<flit_single> &in_stream,
+		hls::stream<flit_single> &out_stream
 		) {
 #pragma HLS INTERFACE s_axilite port=return
 #pragma HLS INTERFACE axis register both port=out_stream
@@ -23,8 +23,8 @@ void axi4lite_stream_conf(
 	static ap_uint<1> read_reqs[256] = {};
 
 	//WRITE COMMAND
-	vaxis_single result;
-	result.user = 3;
+	flit_single result;
+	result.user = TLAST_MASK_HARDEND_3INVALID;
 	result.dest = instruction_base.range(29, 16);
 	result.data.tag  = instruction_base.range(15, 0);
 
@@ -58,7 +58,7 @@ void axi4lite_stream_conf(
 			}
 			std::cout << std::endl;
 			std::cout << wait_counter << std::endl << std::endl;
-			vaxis_single buffer;
+			flit_single buffer;
 			in_stream >> buffer;
 			ap_uint<8> return_cookie =  buffer.data.value.range(7, 0);
 

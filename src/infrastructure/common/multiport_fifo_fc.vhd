@@ -13,7 +13,8 @@ generic (
 	TUPPLE_COUNT : natural := 4;
 	
 	--IN/OUT fifo parameters
-    VIRTUAL_PORT_CNT_LOG2 : natural := 3;
+    VIRTUAL_PORT_CNT_LOG2_INPUT : natural := 3;
+    VIRTUAL_PORT_CNT_LOG2_OUTPUT : natural := 3;
 	MEMORY_DEPTH_LOG2_INPUT : natural := 6;
 	MEMORY_DEPTH_LOG2_OUTPUT : natural := 6;
 	ALMOST_FULL_LEVEL_INPUT : natural := 16;
@@ -25,21 +26,21 @@ Port (
 	ap_clk : in std_logic;
 	rst_n : in std_logic;
 	
-    credits_list_out_input : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
-    credits_list_out_output : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
+    credits_list_out_input : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2_INPUT)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
+    credits_list_out_output : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2_OUTPUT)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
 	
     change_output_chan_req      : out std_logic;
     
-    next_output_chan_inp        : in std_logic_vector(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
+    next_output_chan_inp        : in std_logic_vector(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0);
     read_enable_inp             : in std_logic;
-    next_output_chan_out        : in std_logic_vector(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
+    next_output_chan_out        : in std_logic_vector(VIRTUAL_PORT_CNT_LOG2_OUTPUT-1 downto 0);
     read_enable_out             : in std_logic;
     next_output_skip_prftchd_data_out : in std_logic;
 	
     stream_core_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
     stream_core_s_status : in stream_status;
 	stream_core_s_ready : out std_logic;
-	stream_core_s_ldest : in slv(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
+	stream_core_s_ldest : in slv(VIRTUAL_PORT_CNT_LOG2_OUTPUT-1 downto 0);
 
     stream_core_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
     stream_core_m_status : out stream_status;
@@ -90,10 +91,11 @@ begin
     input_fifo: entity libramen.multiport_fifo
     generic map  (
         TUPPLE_COUNT => TUPPLE_COUNT,
-        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2,
+        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2_INPUT,
         MEMORY_DEPTH_LOG2 => MEMORY_DEPTH_LOG2_INPUT,
         ALMOST_FULL_LEVEL => ALMOST_FULL_LEVEL_INPUT,
-        MEMORY_TYPE => MEMORY_TYPE_INPUT
+        MEMORY_TYPE => MEMORY_TYPE_INPUT,
+        OVERRIDE_DELAY_LINE_LENGTH => 0
     ) port map (
         ap_clk => ap_clk,
         rst_n => rst_n,
@@ -110,7 +112,7 @@ begin
         stream_s_tuples => stream_fc_in_tuples,
         stream_s_status => stream_fc_in_status,
         stream_s_ready  => stream_fc_in_ready,
-        stream_s_ldest  => stream_fc_in_status.cdest(VIRTUAL_PORT_CNT_LOG2-1 downto 0),
+        stream_s_ldest  => stream_fc_in_status.cdest(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0),
         
         stream_m_tuples => stream_core_m_tuples,
         stream_m_status => stream_core_m_status,
@@ -121,10 +123,11 @@ begin
     output_fifo: entity libramen.multiport_fifo
     generic map  (
         TUPPLE_COUNT => TUPPLE_COUNT,
-        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2,
+        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2_OUTPUT,
         MEMORY_DEPTH_LOG2 => MEMORY_DEPTH_LOG2_OUTPUT,
         ALMOST_FULL_LEVEL => ALMOST_FULL_LEVEL_OUTPUT,
-        MEMORY_TYPE => MEMORY_TYPE_OUTPUT
+        MEMORY_TYPE => MEMORY_TYPE_OUTPUT,
+        OVERRIDE_DELAY_LINE_LENGTH => 0
     ) port map (
         ap_clk => ap_clk,
         rst_n => rst_n,
