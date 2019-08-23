@@ -16,10 +16,6 @@ generic (
     OFFLOAD_DEST_REPLACEMENT : boolean := true;
 	OFFLOAD_RETURN_HANDLING : boolean := true;
 	
-	--Set scheduling parameters
-	LFSR_INSTEAD_OF_SEQ_ORDER : boolean := true;
-	CREDIT_SENSITIVE_SCHEDULE : boolean := true;
-	
 	--IN/OUT fifo parameters  
     VIRTUAL_PORT_CNT_LOG2 : natural := 4;
 	MEMORY_DEPTH_LOG2_INPUT : natural := 6;
@@ -112,9 +108,8 @@ begin
 
     scheduler: entity libramen.roundrobin_scheduler
     generic map (
-        LFSR_INSTEAD_OF_SEQ_ORDER => LFSR_INSTEAD_OF_SEQ_ORDER, 
-        CREDIT_SENSITIVE_SCHEDULE => CREDIT_SENSITIVE_SCHEDULE, 
-        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2,
+        VIRTUAL_PORT_CNT_LOG2_INPUT => VIRTUAL_PORT_CNT_LOG2,
+        VIRTUAL_PORT_CNT_LOG2_OUTPUT => VIRTUAL_PORT_CNT_LOG2,
         MEMORY_DEPTH_LOG2_INPUT => MEMORY_DEPTH_LOG2_INPUT,
         MEMORY_DEPTH_LOG2_OUTPUT => MEMORY_DEPTH_LOG2_OUTPUT,
         MAX_CORE_PIPLINE_DEPTH => ALMOST_FULL_LEVEL_OUTPUT
@@ -128,10 +123,7 @@ begin
         change_output_chan_req => change_output_chan_req,
         
         next_output_chan_inp    => next_output_chan_inp,
-        read_enable_inp         => read_enable_inp,
-        next_output_chan_out    => next_output_chan_out,
-        read_enable_out         => read_enable_out,
-        next_output_skip_prftchd_data_out => next_output_skip_prftchd_data_out
+        read_enable_inp         => read_enable_inp
     );
 
     fifos: entity libramen.vaxis_multiport_fifo_fc
@@ -155,14 +147,8 @@ begin
         credits_list_out_input => credits_list_out_input_buffer,
         credits_list_out_output => credits_list_out_output_buffer,
         
-        
-        change_output_chan_req  => change_output_chan_req,
-        
         next_output_chan_inp        => next_output_chan_inp,
         read_enable_inp             => read_enable_inp,
-        next_output_chan_out        => next_output_chan_out,
-        read_enable_out             => read_enable_out,
-        next_output_skip_prftchd_data_out => next_output_skip_prftchd_data_out,
         
         stream_core_s_tuples => stream_destreplace_tuples,
         stream_core_s_status => stream_destreplace_status,

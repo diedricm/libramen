@@ -37,6 +37,7 @@ architecture Behavioural of switch_port_arbiter is
 
 	signal stream_reg_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
 	signal stream_reg_status  : stream_status;
+    signal stream_reg_ready : std_logic;
 
 	signal outport_occupied  : std_logic := '0';
 	signal selected_input    : inport_id := (others => '0');
@@ -45,11 +46,13 @@ begin
     comb: process (ALL)
     begin    
         stream_s_ready <= (others => '0'); 
-        stream_s_ready(to_integer(selected_input)) <= stream_m_ready AND outport_occupied;
+        stream_s_ready(to_integer(selected_input)) <= stream_reg_ready AND outport_occupied;
         
-        stream_m_tuples <= stream_reg_tuples;
-        stream_m_status <= stream_reg_status;
-        stream_m_status.valid <= stream_reg_status.valid;
+        for k in 0 to TUPPLE_COUNT-1 loop
+            stream_reg_tuples(k) <= stream_s_tuples(to_integer(selected_input)*TUPPLE_COUNT+k);
+        end loop;
+        stream_reg_status <= stream_s_status(to_integer(selected_input));
+        stream_reg_status.valid <= stream_s_status(to_integer(selected_input)).valid AND outport_occupied;
     end process;
 
     main: process (clk)
@@ -57,27 +60,10 @@ begin
         variable cdest_int : natural;
     begin
         if rising_edge(clk)  then
-            if is0(rstn) then
-                stream_reg_status.valid <= '0';
-            else
-                if is1(stream_m_ready AND stream_m_status.valid) then
-                    stream_reg_status.valid <= '0';
-                end if;
-            
-                --Mux Data
-                if (is1(stream_m_ready OR NOT(stream_m_status.valid))) AND is1(outport_occupied) then
-                    for k in 0 to TUPPLE_COUNT-1 loop
-                        stream_reg_tuples(k) <= stream_s_tuples(to_integer(selected_input)*TUPPLE_COUNT+k);
-                    end loop;
-                    stream_reg_status <= stream_s_status(to_integer(selected_input));
-                    
-                    if is1(stream_s_status(to_integer(selected_input)).yield) then
-                        outport_occupied <= '0';
-                    end if;
-                end if;
-                
+            if is1(rstn) then
                 --Select new inputs
-                if is0(outport_occupied) then
+                if is0(outport_occupied) OR (is1(stream_m_ready AND stream_m_status.valid AND stream_m_status.yield)) then
+                    outport_occupied <= '0';
                     test_inport_tmp := selected_input;
                     for j in 0 to INPORT_CNT-1 loop
                         if is1(port_req(to_integer(test_inport_tmp))) then
@@ -94,5 +80,26 @@ begin
             end if;
         end if;
     end process;
+
+    regslice: entity libramen.stream_register_slice 
+    generic map (
+        TUPPLE_COUNT => TUPPLE_COUNT
+    ) port map (
+        clk => clk,
+        rstn => rstn,
+        
+        clear => '0',
+        is_empty => OPEN,
+        
+        stream_s_tuples => stream_reg_tuples,
+        stream_s_status => stream_reg_status,
+        stream_s_ready => stream_reg_ready,
+        stream_s_ldest => (others => '-'),
+
+        stream_m_tuples => stream_m_tuples,
+        stream_m_status => stream_m_status,
+        stream_m_ready => stream_m_ready,
+        stream_m_ldest => OPEN
+    );
 
 end architecture ; -- Behavioural

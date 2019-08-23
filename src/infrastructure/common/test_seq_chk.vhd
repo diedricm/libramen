@@ -9,7 +9,9 @@ library libramen;
 
 entity test_seq_chk is
 generic (
-    TEST_PAYLOAD : natural := 0
+    TEST_PAYLOAD : natural := 0;
+    SEED : natural := 0;
+    RANDOM_READY_SIG : boolean := false
 );
 Port (
     clk : in std_logic;
@@ -24,17 +26,25 @@ Port (
 end test_seq_chk;
 
 architecture Behavioral of test_seq_chk is
+    constant rand_spec  : lfsr_spec := new_lfsr_iterator(64, true);
+    
+    signal rand_vec : std_logic_vector(64-1 downto 0) := init_lfsr(rand_spec, SEED);
+
     signal iterator_s : natural := 1;
+    signal ready_enable : std_logic;
 begin
     
-    stream_s_ready <= rstn;
+    ready_enable <= or_reduce(rand_vec(2 downto 0)) when RANDOM_READY_SIG else '1';
+    stream_s_ready <= rstn AND ready_enable;
     
     slave: process (clk)
     begin
         if rising_edge(clk) then
             slave_error_interrupt <= '0';
             
-            if is1(stream_s_status.valid) AND contains_data(stream_s_status) then
+            rand_vec <= step(rand_spec, rand_vec);
+            
+            if is1(stream_s_status.valid) AND is1(stream_s_ready) AND contains_data(stream_s_status) then
                 iterator_s <= iterator_s + 1;
                 
                 if (to_integer(unsigned(stream_s_tuples(0).value)) /= iterator_s) AND (to_integer(unsigned(stream_s_tuples(0).tag)) /= 0) then

@@ -28,15 +28,10 @@ Port (
 	
     credits_list_out_input : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2_INPUT)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
     credits_list_out_output : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2_OUTPUT)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
-	
-    change_output_chan_req      : out std_logic;
     
     next_output_chan_inp        : in std_logic_vector(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0);
     read_enable_inp             : in std_logic;
-    next_output_chan_out        : in std_logic_vector(VIRTUAL_PORT_CNT_LOG2_OUTPUT-1 downto 0);
-    read_enable_out             : in std_logic;
-    next_output_skip_prftchd_data_out : in std_logic;
-	
+    
     stream_core_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
     stream_core_s_status : in stream_status;
 	stream_core_s_ready : out std_logic;
@@ -45,6 +40,7 @@ Port (
     stream_core_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
     stream_core_m_status : out stream_status;
 	stream_core_m_ready : in std_logic;
+	stream_core_m_ldest : out slv(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0);
 
     stream_ext_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
     stream_ext_s_status : in stream_status;
@@ -66,7 +62,32 @@ architecture Behavioral of vaxis_multiport_fifo_fc is
     signal stream_fc_out_ready : std_logic;
         
     signal almost_full  : std_logic;
+    
+    signal change_output_chan_req      : std_logic;
+    signal next_output_chan_out        : std_logic_vector(VIRTUAL_PORT_CNT_LOG2_OUTPUT-1 downto 0);
+    signal read_enable_out             : std_logic;
+    signal next_output_skip_prftchd_data_out : std_logic;
 begin
+
+
+    scheduler: entity libramen.multiport_fifo_out_scheduler
+    generic map (	
+        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2_OUTPUT,
+        MEMORY_DEPTH_LOG2_OUTPUT => MEMORY_DEPTH_LOG2_OUTPUT,
+        MAX_CORE_PIPLINE_DEPTH => ALMOST_FULL_LEVEL_OUTPUT
+    ) port map (
+        clk => ap_clk,
+        rst_n => rst_n,
+    
+        credits_list_out_output => credits_list_out_output,
+    
+        change_output_chan_req  => change_output_chan_req,
+            
+        next_output_chan_out    => next_output_chan_out,
+        read_enable_out         => read_enable_out,
+        next_output_skip_prftchd_data_out => next_output_skip_prftchd_data_out
+    );
+    
 
     input_fc: entity libramen.vaxis_congestion_feedback
     generic map (
@@ -117,7 +138,7 @@ begin
         stream_m_tuples => stream_core_m_tuples,
         stream_m_status => stream_core_m_status,
         stream_m_ready  => stream_core_m_ready,
-        stream_m_ldest  => OPEN
+        stream_m_ldest  => stream_core_m_ldest
     );
     
     output_fifo: entity libramen.multiport_fifo
@@ -171,5 +192,39 @@ begin
         stream_m_status => stream_ext_m_status,
         stream_m_ready  => stream_ext_m_ready
     );
+    
+    perf_counter_section: if true generate
+        constant DEBUG_PERF_COUNTER_WINSIZE : natural := 1000;
+        signal stream_ext_s_debug_active_now : std_logic;
+        signal stream_ext_m_debug_active_now : std_logic;
+        signal stream_ext_s_debug_activation_window_1k : std_logic_vector(DEBUG_PERF_COUNTER_WINSIZE-1 downto 0) := (others => '0');
+        signal stream_ext_m_debug_activation_window_1k : std_logic_vector(DEBUG_PERF_COUNTER_WINSIZE-1 downto 0) := (others => '0');
+        signal stream_ext_s_debug_activation_window_num : natural range 0 to DEBUG_PERF_COUNTER_WINSIZE;
+        signal stream_ext_m_debug_activation_window_num : natural range 0 to DEBUG_PERF_COUNTER_WINSIZE;
+    begin
+        stream_ext_s_debug_active_now <= '1' when contains_data(stream_ext_s_status) AND is1(stream_ext_s_status.valid and stream_ext_s_ready) else '0';
+        stream_ext_m_debug_active_now <= '1' when contains_data(stream_ext_m_status) AND is1(stream_ext_m_status.valid and stream_ext_m_ready) else '0';
+        debug_perf_counter: process(ap_clk)
+            variable tmp : natural range 0 to DEBUG_PERF_COUNTER_WINSIZE;
+        begin
+            if rising_edge(ap_clk) and is1(rst_n) then
+                stream_ext_s_debug_activation_window_1k(0) <= stream_ext_s_debug_active_now;
+                tmp := to_integer(unsigned(stream_ext_s_debug_activation_window_1k(0 downto 0)));
+                for i in 1 to DEBUG_PERF_COUNTER_WINSIZE-1 loop
+                    stream_ext_s_debug_activation_window_1k(i) <= stream_ext_s_debug_activation_window_1k(i-1);
+                    tmp := tmp + to_integer(unsigned(stream_ext_s_debug_activation_window_1k(i downto i)));
+                end loop;
+                stream_ext_s_debug_activation_window_num <= tmp;
+                
+                stream_ext_m_debug_activation_window_1k(0) <= stream_ext_m_debug_active_now;
+                tmp := to_integer(unsigned(stream_ext_m_debug_activation_window_1k(0 downto 0)));
+                for i in 1 to DEBUG_PERF_COUNTER_WINSIZE-1 loop
+                    stream_ext_m_debug_activation_window_1k(i) <= stream_ext_m_debug_activation_window_1k(i-1);
+                    tmp := tmp + to_integer(unsigned(stream_ext_m_debug_activation_window_1k(i downto i)));
+                end loop;            
+                stream_ext_m_debug_activation_window_num <= tmp;
+            end if;
+        end process;
+    end generate;
 
 end Behavioral;

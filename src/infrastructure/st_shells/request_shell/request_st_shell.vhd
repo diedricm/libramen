@@ -54,15 +54,37 @@ architecture Behavioral of request_st_shell is
     signal credits_list_out_input_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2_INPUT)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
     signal credits_list_out_output_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2_OUTPUT)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
 
-    signal change_output_chan_req : std_logic;
-    
     signal next_output_chan_inp : std_logic_vector(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0);
     signal read_enable_inp : std_logic;
-    signal next_output_chan_out : std_logic_vector(VIRTUAL_PORT_CNT_LOG2_OUTPUT-1 downto 0);
-    signal read_enable_out : std_logic;
-    signal next_output_skip_prftchd_data_out : std_logic;
     
+    signal stream_core_m_ldest : std_logic_vector(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0);
 begin
+
+    sheduler: entity libramen.request_scheduler
+    generic map (
+        VIRTUAL_PORT_CNT_LOG2_INPUT => VIRTUAL_PORT_CNT_LOG2_INPUT,
+        VIRTUAL_PORT_CNT_LOG2_OUTPUT => VIRTUAL_PORT_CNT_LOG2_OUTPUT,
+        MEMORY_DEPTH_LOG2_INPUT  => MEMORY_DEPTH_LOG2_INPUT,
+        MEMORY_DEPTH_LOG2_OUTPUT => MEMORY_DEPTH_LOG2_OUTPUT,
+        MAX_CORE_PIPELINE_DEPTH  => ALMOST_FULL_LEVEL_OUTPUT,
+        REQUEST_PIPELINE_DEPTH   => RAM_PIPELINE_DEPTH_lookup(MEMORY_TYPE_INPUT, 0)
+    ) port map (
+        clk => ap_clk,
+        rst_n => rst_n,
+    
+        credits_list_out_input  => credits_list_out_input_buffer,
+        credits_list_out_output => credits_list_out_output_buffer,
+    
+        chan_req => chan_req,
+        chan_req_valid => chan_req_valid,
+        chan_req_ready => chan_req_ready,
+    
+        input_out_chan => stream_core_m_ldest,
+        input_out_chan_valid => stream_core_m_status.valid,
+        
+        next_output_chan_inp    => next_output_chan_inp,
+        read_enable_inp         => read_enable_inp
+    );
 
     fifos: entity libramen.vaxis_multiport_fifo_fc
     generic map (
@@ -84,24 +106,19 @@ begin
         
         credits_list_out_input => credits_list_out_input_buffer,
         credits_list_out_output => credits_list_out_output_buffer,
-        
-        
-        change_output_chan_req  => change_output_chan_req,
-        
+
         next_output_chan_inp        => next_output_chan_inp,
         read_enable_inp             => read_enable_inp,
-        next_output_chan_out        => next_output_chan_out,
-        read_enable_out             => read_enable_out,
-        next_output_skip_prftchd_data_out => next_output_skip_prftchd_data_out,
         
-        stream_core_s_tuples => stream_destreplace_tuples,
-        stream_core_s_status => stream_destreplace_status,
-        stream_core_s_ready  => stream_destreplace_ready,
-        stream_core_s_ldest  => stream_destreplace_ldest,        
+        stream_core_s_tuples => stream_core_s_tuples,
+        stream_core_s_status => stream_core_s_status,
+        stream_core_s_ready  => stream_core_s_ready,
+        stream_core_s_ldest  => stream_core_s_ldest,        
         
-        stream_core_m_tuples => stream_regfilter_tuples,
-        stream_core_m_status => stream_regfilter_status,
-        stream_core_m_ready  => stream_regfilter_ready,
+        stream_core_m_tuples => stream_core_m_tuples,
+        stream_core_m_status => stream_core_m_status,
+        stream_core_m_ready  => stream_core_m_ready,
+        stream_core_m_ldest  => stream_core_m_ldest,
         
         stream_ext_s_tuples => stream_ext_s_tuples,
         stream_ext_s_status => stream_ext_s_status,

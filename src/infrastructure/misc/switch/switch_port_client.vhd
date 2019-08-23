@@ -42,74 +42,88 @@ architecture Behavioural of switch_port_client is
     type inport_id_vec is array (natural range <>) of inport_id;
 
     signal is_running : std_logic := '0';
-    signal illegal_cdest_req : std_logic := '0';
+    
     signal selected_port : outport_id := (others => '0');
-    signal terminate : std_logic;
     
     signal cdest_tmp : outport_id;
     signal cdest_tmp_decode_valid : std_logic;
+    
+    signal cdest_reg : outport_id := (others => '0');
+    signal cdest_tmp_decode_valid_reg : std_logic := '0';
     
     signal local_addr : outport_id;
     signal subnet_addr : unsigned(GATEWAY_ADDR_LENGTH-1 downto 0);
 begin
 
+    local_addr <= to_unsigned(to_integer(unsigned(stream_s_status.cdest(CDEST_PARSE_LENGTH+CDEST_PARSE_OFFSET-1 downto CDEST_PARSE_OFFSET))), OUTPORT_CNT_LOG2);
+    subnet_addr <= unsigned(stream_s_status.cdest(GATEWAY_ADDR_LENGTH+GATEWAY_ADDR_OFFSET-1 downto GATEWAY_ADDR_OFFSET));
+
     compute_cdest: process (ALL)
+        variable tmp : outport_id;
     begin
-        local_addr <= to_unsigned(to_integer(unsigned(stream_s_status.cdest(CDEST_PARSE_LENGTH+CDEST_PARSE_OFFSET-1 downto CDEST_PARSE_OFFSET))), OUTPORT_CNT_LOG2);
-        subnet_addr <= unsigned(stream_s_status.cdest(GATEWAY_ADDR_LENGTH+GATEWAY_ADDR_OFFSET-1 downto GATEWAY_ADDR_OFFSET));
-        
-        cdest_tmp_decode_valid <= '0';
-        
-        if (ENABLE_INTERNETWORK_ROUTING)  then
-            if subnet_addr /= SUBNET_IDENTITY then
-                cdest_tmp <= (others => '0');
-                cdest_tmp_decode_valid <= '1';
+        if is1(stream_s_status.valid) then
+            
+            if (ENABLE_INTERNETWORK_ROUTING)  then
+                if subnet_addr /= SUBNET_IDENTITY then
+                    tmp := (others => '0');
+                else
+                    tmp := local_addr+1;
+                end if;
             else
-                cdest_tmp <= local_addr+1;
+                tmp := local_addr;
             end if;
+            
+            cdest_tmp_decode_valid <= '0';
+            if tmp < OUTPORT_CNT AND is1(CONNECTION_VECTOR(to_integer(tmp))) then
+                cdest_tmp_decode_valid <= '1';
+            end if;
+            
+            cdest_tmp <= tmp;
         else
-            cdest_tmp <= local_addr;
+            cdest_tmp <= (others => '0');
+            cdest_tmp_decode_valid <= '0';
         end if;
         
-        if cdest_tmp < OUTPORT_CNT AND is1(CONNECTION_VECTOR(to_integer(cdest_tmp))) then
-            cdest_tmp_decode_valid <= '1';
-        end if;        
+        if is1(is_running) then
+            cdest_tmp <= cdest_reg;
+            cdest_tmp_decode_valid <= cdest_tmp_decode_valid_reg;
+        end if; 
+    end process;
+
+    comb_output: process (ALL)
+    begin
+        port_req <= (others => '0'); 
+        port_req(to_integer(cdest_tmp)) <= cdest_tmp_decode_valid;
+        
+        if is0(cdest_tmp_decode_valid) then
+            stream_s_ready <= '0';
+        else
+            stream_s_ready <= stream_m_ready(to_integer(cdest_tmp));
+        end if;    
     end process;
 
     main: process (clk)
     begin
         if rising_edge(clk) then
+            if is1(rstn) then
         
-            if is1(terminate) OR is0(is_running) then
-                is_running <= '0';
-                
-                if is1(stream_s_status.valid) then
-                    if is1(cdest_tmp_decode_valid) then
-                        selected_port <= cdest_tmp;
-                        is_running <= NOT(terminate);
-                    else
-                        illegal_cdest_req <= '1';
-                        report "Illegal port reference!" severity error;
+                cdest_reg <= cdest_tmp;
+                cdest_tmp_decode_valid_reg <= cdest_tmp_decode_valid;
+        
+                if is0(is_running) then
+                    if is1(stream_s_status.valid AND stream_s_ready) then
+                        is_running <= '1';
+                        if is0(cdest_tmp_decode_valid) then 
+                            report "Illegal port reference." severity error;
+                        end if;
+                    end if;
+                else
+                    if is1(stream_s_status.valid AND stream_s_ready AND stream_s_status.yield) then
+                        is_running <= '0';
                     end if;
                 end if;
+                
             end if;
-        
-        end if;
-    end process;
-
-    comb: process (ALL)
-    begin
-        terminate <= stream_s_status.valid AND stream_s_status.yield AND stream_s_ready;
-    
-        port_req <= (others => '0'); 
-        port_req(to_integer(selected_port)) <= is_running AND NOT(illegal_cdest_req);
-        
-        if is1(illegal_cdest_req) then
-            stream_s_ready <= '1';
-        elsif is1(is_running) then
-            stream_s_ready <= stream_m_ready(to_integer(selected_port));
-        else 
-            stream_s_ready <= '0';
         end if;
     end process;
 

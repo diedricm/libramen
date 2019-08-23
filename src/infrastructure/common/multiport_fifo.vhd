@@ -81,18 +81,22 @@ architecture Behavioral of multiport_fifo is
 	signal read_credit_modified_valid_final : std_logic := '0';
 	
 	signal advance_read_pipeline : std_logic;
+	
+	signal DEBUG_EXPECTED_CREDIT_LIST : mem_ptr_array(2**VIRTUAL_PORT_CNT_LOG2-1 downto 0):= (others => (others => '0'));
 begin
-
+    
+    --TODO the plus 3 is used to mitigate credit propagation delays. Dont judge me!
+    almost_full <= '1' when (credits_list(to_integer(unsigned(stream_s_ldest))) < (ALMOST_FULL_LEVEL + 3)) AND is1(stream_s_status.valid AND stream_s_ready) else '0';            
+                
     stream_s_ready <= '1' when credits_list(to_integer(last_write_chan)) > 3 else '0';
     
 	stream_m_status.valid <= read_addr_delay_line(0).valid AND NOT(next_output_skip_prftchd_data);
     stream_m_status.ptype <= get_stream_status(read_data_out).ptype;
 	stream_m_status.cdest <= get_stream_status(read_data_out).cdest;
 	stream_m_status.yield <= get_stream_status(read_data_out).yield;
-	
+	stream_m_ldest  <= std_logic_vector(read_addr_delay_line(0).self_chan);
 	stream_m_tuples <= get_tuples(read_data_out);
 	
-	stream_m_ldest  <= std_logic_vector(read_addr_delay_line(RAM_PIPELINE_DEPTH-1).self_chan);
 
     advance_read_pipeline <= stream_m_ready OR NOT(read_addr_delay_line(0).valid);
 
@@ -155,7 +159,6 @@ begin
         if rising_edge(ap_clk) then
             write_credit_modified_valid <= '0';
             write_enable <= '0';
-            almost_full <= '0';
             
             if is1(stream_s_status.valid AND stream_s_ready AND rst_n) then
                 flit_vaxis_dest := unsigned(stream_s_ldest);
@@ -172,12 +175,7 @@ begin
                     write_credit_modified <= flit_vaxis_dest;
                     write_credit_modified_valid <= '1';
                 end if;
-                
-                --TODO the plus 3 is used to mitigate credit propagation delays. Dont judge me!
-                if (credits_list(to_integer(flit_vaxis_dest)) < (ALMOST_FULL_LEVEL + 3)) AND is0(almost_full) then
-                    almost_full <= '1';
-                end if;
-            
+                            
                 if (write_ptr_list(to_integer(flit_vaxis_dest)) + 1) = actual_read_ptr_list(to_integer(flit_vaxis_dest)) then
                     report "Write pointer passed read pointer!" severity warning;
                 end if;
@@ -194,30 +192,21 @@ begin
 	
     credit_adjust_proc: process(ALL)
 	begin
-        --if rising_edge(ap_clk) then
-            --if is1(rst_n) then
-                -- adjust credit value if read chan == write chan
-                write_credit_modified_valid_final <= write_credit_modified_valid;
-                read_credit_modified_valid_final <= read_credit_modified_valid;
-                write_credit_modified_final <= write_credit_modified;
-                read_credit_modified_final <= read_credit_modified;
-                if is1(read_credit_modified_valid) AND is1(write_credit_modified_valid) AND (read_credit_modified = write_credit_modified) then
-                    write_credit_modified_valid_final <= '0';
-                    read_credit_modified_valid_final <= '0';
-                end if;
-                
-                --update credits
-                for i in 0 to 2**VIRTUAL_PORT_CNT_LOG2-1 loop
-                    if is1(write_credit_modified_valid_final) AND (write_credit_modified_final = i) then
-                        credits_list(i) <= credits_list(i) - 1;
-                    elsif is1(read_credit_modified_valid_final) AND (read_credit_modified_final = i) then
-                        credits_list(i) <= credits_list(i) + 1;
-                    else
-                        credits_list(i) <= credits_list(i);
+        if rising_edge(ap_clk) then
+            if is1(rst_n) then
+                if NOT(is1(read_credit_modified_valid) AND is1(write_credit_modified_valid) AND (read_credit_modified = write_credit_modified)) then
+                    
+                    if is1(write_credit_modified_valid)  then
+                        credits_list(to_integer(write_credit_modified)) <= credits_list(to_integer(write_credit_modified)) - 1;
                     end if;
-                end loop;
-            --end if;
-        --end if;
+                    
+                    if is1(read_credit_modified_valid) then 
+                        credits_list(to_integer(read_credit_modified)) <= credits_list(to_integer(read_credit_modified)) + 1;
+                    end if;
+                    
+                end if;
+            end if;
+        end if;
     end process;
 	
     mem : entity libramen.xilinx_dual_port_ram 
@@ -235,7 +224,7 @@ begin
         addrb => std_logic_vector(read_addr_delay_line(RAM_PIPELINE_DEPTH-1).self_chan) & std_logic_vector(read_addr_delay_line(RAM_PIPELINE_DEPTH-1).req_addr), 
         doutb => read_data_out
     );
-    
+
     --assert ALMOST_FULL_LEVEL > 3 report "vaxis_multiport_fifo: ALMOST_FULL_LEVEL must be larger than 3!" severity failure;
 
 end Behavioral;

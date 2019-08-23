@@ -41,26 +41,30 @@ architecture Behavioral of vaxis_congestion_backoff is
 	--          |                                   |             |
     --          v                                   |             |
 	--   +--------------+                           |      +--------------+
-	--   |              | congestion counter=0      |      | CLEAR BUFFER |
-	--   | INIT  Ciruit |---------------------------+      +--------------+
-    --   |              |     OR new dest                         ^
-	--   +--------------+                                         |
-	--          |                                                 |
-	--          |-transmit(M)                         transmit(R)-|
-	--          |                                                 |
-	--          |                                                 |
-	--    +-------------+        congestion counter=0       +-----------+
-	--    |PROBE circuit|---------------------------------->| Terminate |
-	--    +-------------+            OR new dest            +-----------+
-	--          |                                                 ^
-	--          |                                                 |
-	--          |-probe counter=0                                 |
-	--          |                                                 |
-	--          v                                                 |
-	--   +--------------+                                         |
-	--   | Await backoff|            congestion counter=0         |
-	--   |    signal    |-----------------------------------------+
-	--   +--------------+          OR new dest OR hardend
+	--   |              | congestion counter=0      |      | CLEAR BUFFER |<---------+
+	--   | INIT  Ciruit |---------------------------+      +--------------+          |
+    --   |              |     OR new dest                         ^                  |
+	--   +--------------+                                         |                  |
+	--          |                                                 |                  |
+	--          |-transmit(M)                         transmit(R)-|                  |
+	--          |                                                 |                  |
+	--          |                                                 |                  |
+	--    +-------------+        congestion counter=0       +-----------+            |
+	--    |PROBE circuit|---------------------------------->| Terminate |            |
+	--    +-------------+            OR new dest            +-----------+            |
+	--          |                                                 ^                  |
+	--          |                                                 |                  |
+	--          |-probe counter=0                                 |                  |
+	--          |                                                 |                  |
+	--          v                                                 |                  |
+	--   +--------------+     congestion counter=0 OR new dest    |                  |
+	--   |              |-----------------------------------------+                  |
+	--   | Await backoff|                                                            |
+	--   |    signal    |                                                            |
+	--   |              |------------------------------------------------------------+
+	--   +--------------+                    hardend transmit(R)
+	               
+    constant EXTENDED_BACKOFF_PERIOD : natural := BACKOFF_DETECTION_PERIOD*2;
 	               
 	type backoff_state_type is (AWAIT_CONN_REQ, INIT_CIRCUIT, PROBE_CIRCUIT, AWAIT_BACKOFF_SIGNAL, TERMINATE, CLEAR_BUFFER);
 	signal curr_state : backoff_state_type := AWAIT_CONN_REQ;
@@ -68,7 +72,7 @@ architecture Behavioral of vaxis_congestion_backoff is
 	
 	signal circuit_destination : std_logic_vector(CDEST_SIZE_IN_BIT-1 downto 0) := (others => '0');
 
-	signal detection_counter : natural range 0 to BACKOFF_DETECTION_PERIOD*2;
+	signal detection_counter : natural range 0 to EXTENDED_BACKOFF_PERIOD;
 	signal probe_counter : natural range 0 to CIRCUIT_SETUP_PROBE_PERIOD;
 
     signal stream_reg_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
@@ -88,13 +92,13 @@ begin
 	counters: process (clk)
 	begin
 		if rising_edge(clk) then
-            curr_state <= next_state;
-
-			if rstn = '1' then
+            if rstn = '1' then
+		
+                curr_state <= next_state;
 
 				if stream_reg_ready = '1' then
 				    if (curr_state = INIT_CIRCUIT) then
-				        detection_counter <= BACKOFF_DETECTION_PERIOD*2;
+				        detection_counter <= EXTENDED_BACKOFF_PERIOD;
 				    else
                         detection_counter <= BACKOFF_DETECTION_PERIOD;
                     end if;
@@ -122,9 +126,9 @@ begin
 		end if;
 	end process;
 
-    backoff <= '1' when ((curr_state /= TERMINATE) AND (next_state = TERMINATE)) OR ((curr_state = INIT_CIRCUIT) AND (next_state = AWAIT_CONN_REQ)) else '0';
+    backoff <= '1' when (detection_counter = 0) AND (((curr_state /= TERMINATE) AND (next_state = TERMINATE)) OR ((curr_state = INIT_CIRCUIT) AND (next_state = AWAIT_CONN_REQ))) else '0';
     clear_reg_slice <= '1' when (curr_state = INIT_CIRCUIT) AND (next_state = AWAIT_CONN_REQ) else '0';
-    reset_circuit <= '1' when (detection_counter <= 1) OR (circuit_destination /= stream_s_status.cdest) else '0';
+    reset_circuit <= '1' when (detection_counter = 0) OR ((circuit_destination /= stream_s_status.cdest) AND is1(stream_s_status.valid)) else '0';
     
 	state_transition: process (ALL)
 	begin
@@ -140,7 +144,7 @@ begin
 					next_state <= AWAIT_CONN_REQ;
 				end if;
 
-				if is1(stream_m_ready) then
+				if is1(stream_m_ready and stream_m_status.valid) then
 					next_state <= PROBE_CIRCUIT;
 				end if;
 
@@ -154,8 +158,12 @@ begin
 				end if;
 
 			when AWAIT_BACKOFF_SIGNAL => 
-				if is1(reset_circuit) OR is_hardend(stream_s_status) then
+				if is1(reset_circuit) then
 					next_state <= TERMINATE;
+				end if;
+				
+				if (is_hardend(stream_s_status) AND is1(stream_s_status.valid AND stream_s_ready)) then
+				    next_state <= CLEAR_BUFFER;
 				end if;
 
 			when TERMINATE =>
@@ -194,7 +202,7 @@ begin
 
 			when AWAIT_BACKOFF_SIGNAL => 
 				stream_s_ready <= stream_reg_ready AND NOT(reset_circuit);
-				stream_reg_status.valid <= stream_s_status.valid;
+				stream_reg_status.valid <= stream_s_status.valid AND stream_s_ready;
 				stream_reg_status.ptype <= stream_s_status.ptype;
 				if is_hardend(stream_s_status) then
 				    stream_reg_status.yield <= '1';

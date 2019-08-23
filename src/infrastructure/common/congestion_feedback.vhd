@@ -57,13 +57,8 @@ architecture Behavioral of vaxis_congestion_feedback is
 	signal curr_state : unit_state := AWAIT_BACKOFF_REQ;
 
     signal backoff_counter : natural;
-    signal idle_counter : natural;
 
     signal transmission_active : std_logic;
-    
-    signal stream_reg_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
-    signal stream_reg_status : stream_status;
-    signal stream_reg_ready : std_logic;
 begin
 
     
@@ -81,14 +76,11 @@ begin
     					backoff_counter <= backoff_counter - 1;
 					else
 						curr_state <= IDLE;
-						idle_counter <= CIRCUIT_SETUP_PROBE_PERIOD;
     				end if;
     			end if;
 
     			if curr_state = IDLE then
-    				if idle_counter /= 0 then
-    					idle_counter <= idle_counter - 1;
-					else
+    				if is1(stream_s_status.valid and stream_s_ready and stream_s_status.yield) then
 						curr_state <= AWAIT_BACKOFF_REQ;
     				end if;
     			end if;
@@ -97,31 +89,12 @@ begin
         end if;
     end process;
     
-    transmission_active <= '1' when (curr_state /= BLOCK_CIRCUIT) AND NOT((trigger_backoff = '1') AND (curr_state = AWAIT_BACKOFF_REQ)) else '0';
-    stream_reg_status.valid <= stream_s_status.valid AND transmission_active;
-    stream_s_ready <= stream_reg_ready AND transmission_active;
-	stream_reg_tuples <= stream_s_tuples;
-	stream_reg_status.ptype <= stream_s_status.ptype;
-	stream_reg_status.yield <= '0';
-	stream_reg_status.cdest <= stream_s_status.cdest;
+    transmission_active <= '1' when (curr_state /= BLOCK_CIRCUIT) else '0';
+    stream_m_status.valid <= stream_s_status.valid AND transmission_active;
+    stream_s_ready <= stream_m_ready AND transmission_active;
+	stream_m_tuples <= stream_s_tuples;
+	stream_m_status.ptype <= stream_s_status.ptype;
+	stream_m_status.yield <= '0';
+	stream_m_status.cdest <= stream_s_status.cdest;
 	
-    regslice: entity libramen.stream_register_slice 
-    generic map (
-        TUPPLE_COUNT => TUPPLE_COUNT
-    ) port map (
-        clk => clk,
-        rstn => rstn,
-
-        stream_s_tuples => stream_reg_tuples,
-        stream_s_status => stream_reg_status,
-        stream_s_ready => stream_reg_ready,
-        stream_s_ldest => (others => '-'),
-
-        clear => '0',
-
-        stream_m_tuples => stream_m_tuples,
-        stream_m_status => stream_m_status,
-        stream_m_ready => stream_m_ready,
-        stream_m_ldest => OPEN
-    );
 end Behavioral;

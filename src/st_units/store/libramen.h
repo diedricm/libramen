@@ -29,18 +29,23 @@ struct tuple {
 	ap_uint<TAG_SIZE> tag;
 };
 
+struct quadtuple {
+	ap_uint<VALUE_SIZE> value[4];
+	ap_uint<TAG_SIZE> tag[4];
+};
+
 inline std::ostream &operator<<(std::ostream &os, tuple const &m) {
     return os << "Tuple["<< std::hex << m.value << "; " << std::hex << m.tag << "];";
 }
 
-struct single {
+struct flit_single {
 	tuple						data;
 	ap_uint<TLAST_MASK_SIZE>	user;
 	ap_uint<DEST_SIZE>		dest;
 	ap_uint<1>						last;
 };
 
-inline std::ostream &operator<<(std::ostream &os, single const &m) {
+inline std::ostream &operator<<(std::ostream &os, flit_single const &m) {
 	os << "[";
     os << m.data;
     os << "Dest[" << std::hex << m.dest << "];";
@@ -53,18 +58,18 @@ inline std::ostream &operator<<(std::ostream &os, single const &m) {
     return os;
 }
 
-struct quad {
-	tuple 					data[4];
+struct flit_quad {
+	quadtuple 					data;
 	ap_uint<TLAST_MASK_SIZE>	user;
 	ap_uint<DEST_SIZE>		dest;
 	ap_uint<1>						last;
 };
 
-inline std::ostream &operator<<(std::ostream &os, quad const &m) {
+inline std::ostream &operator<<(std::ostream &os, flit_quad const &m) {
 	for (int i = 0; i < 4; i++) {
-		single tmp;
-		tmp.data.value = m.data[i].value;
-		tmp.data.tag   = m.data[i].tag;
+		flit_single tmp;
+		tmp.data.value = m.data.value[i];
+		tmp.data.tag   = m.data.tag[i];
 		tmp.dest = m.dest;
 		tmp.last = m.last;
 		tmp.user = m.user;
@@ -74,8 +79,8 @@ inline std::ostream &operator<<(std::ostream &os, quad const &m) {
     return os;
 }
 
-struct quad_ext_usr {
-	tuple 					data[4];
+struct flit_quad_ext_usr {
+	quadtuple 					data;
 	ap_uint<TLAST_MASK_SIZE + 4> user;
 	ap_uint<DEST_SIZE>		dest;
 	ap_uint<1>						last;
