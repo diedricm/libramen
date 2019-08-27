@@ -27,6 +27,10 @@ Port (
 	ap_clk : in std_logic;
 	rst_n : in std_logic;
 	
+    credits_list_out_input  : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2_INPUT)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
+    credits_list_out_output : out std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2_OUTPUT)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
+
+	
 	chan_req : in slv(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0);
 	chan_req_valid : in std_logic;
 	chan_req_ready : out std_logic;
@@ -51,9 +55,6 @@ Port (
 end request_st_shell;
 
 architecture Behavioral of request_st_shell is
-    signal credits_list_out_input_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2_INPUT)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
-    signal credits_list_out_output_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2_OUTPUT)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
-
     signal next_output_chan_inp : std_logic_vector(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0);
     signal read_enable_inp : std_logic;
     
@@ -72,8 +73,8 @@ begin
         clk => ap_clk,
         rst_n => rst_n,
     
-        credits_list_out_input  => credits_list_out_input_buffer,
-        credits_list_out_output => credits_list_out_output_buffer,
+        credits_list_out_input  => credits_list_out_input,
+        credits_list_out_output => credits_list_out_output,
     
         chan_req => chan_req,
         chan_req_valid => chan_req_valid,
@@ -104,8 +105,8 @@ begin
         ap_clk => ap_clk,
         rst_n => rst_n,
         
-        credits_list_out_input => credits_list_out_input_buffer,
-        credits_list_out_output => credits_list_out_output_buffer,
+        credits_list_out_input => credits_list_out_input,
+        credits_list_out_output => credits_list_out_output,
 
         next_output_chan_inp        => next_output_chan_inp,
         read_enable_inp             => read_enable_inp,

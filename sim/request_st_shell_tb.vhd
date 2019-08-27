@@ -242,6 +242,9 @@ begin
 		ap_clk => ap_clk,
 		rst_n => rst_n,
 		
+        credits_list_out_input => credits_list_out_input,
+        credits_list_out_output => credits_list_out_output,
+		
 		chan_req => std_logic_vector(chan_req),
 		chan_req_valid => chan_req_valid,
 		chan_req_ready => chan_req_ready, 
