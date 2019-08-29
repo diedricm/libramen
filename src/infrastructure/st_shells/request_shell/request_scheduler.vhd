@@ -26,6 +26,7 @@ port (
 	chan_req : in slv(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0);
 	chan_req_valid : in std_logic;
 	chan_req_ready : out std_logic;
+	chan_clear_outstanding : in std_logic;
 
     input_out_chan : in slv(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0);
     input_out_chan_valid : in std_logic;
@@ -87,8 +88,15 @@ begin
         if rising_edge(clk) then
             if is1(rst_n) then
                 req_pipeline(0) <= req_pipeline_input;
+                
                 for i in 1 to REQUEST_PIPELINE_DEPTH_FIXED-1 loop
                     req_pipeline(i) <= req_pipeline(i-1);
+                end loop;
+                
+                for i in 0 to REQUEST_PIPELINE_DEPTH_FIXED-1 loop
+                    if is1(chan_clear_outstanding) then
+                        req_pipeline(i).valid <= '0';
+                    end if;
                 end loop;
             end if;
         end if;

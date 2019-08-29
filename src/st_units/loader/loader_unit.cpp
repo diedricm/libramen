@@ -31,6 +31,9 @@ void stream_format(
 		) {
 
 	for (int i = 0; i < read_count; i++) {
+#pragma HLS LOOP_TRIPCOUNT min=1 max=64
+#pragma HLS PIPELINE II=2
+
 		ap_uint<BLOCK_SIZE_IN_BITS> tmp_buffer = input.read();
 		ap_uint<64> buffer[2][4];
 #pragma HLS ARRAY_RESHAPE variable=buffer complete
@@ -85,7 +88,8 @@ void dataflow_container(
 #pragma HLS DATAFLOW
 
 	hls::stream<ap_uint<BLOCK_SIZE_IN_BITS> > trn;
-#pragma HLS STREAM variable=trn depth=1 dim=1
+#pragma HLS RESOURCE variable=trn core=FIFO_LUTRAM
+#pragma HLS STREAM variable=trn depth=32 dim=1
 
 	block_load(memory_if, read_start, read_count, trn);
 

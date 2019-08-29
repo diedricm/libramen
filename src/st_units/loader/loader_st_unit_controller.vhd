@@ -43,13 +43,11 @@ architecture Behavioral of loader_st_unit_controller is
 
     constant START_REG_ADDR : natural := 0;
     constant BUFFER_BASE_REG_ADDR : natural := 3;
-    constant REQ_TAG_RANGE_REG_ADDR : natural := 4;
+    constant REQ_TAG_INDEX_REG_ADDR : natural := 4;
+    constant REQ_TAG_HIGH_REG_ADDR : natural := 5;
     
     constant TUPLES_PER_BLOCK : natural := 8;
     constant TUPLES_TO_BLOCK_AMOUNT_SHIFT_ADJ : natural := 3;
-
-    type buffer_addr_list is array (natural range <>) of slv(64-1 downto 0);
-    type tag_list is array (natural range <>) of unsigned(32-1 downto 0);
 
 	type credit_list_output_t is array (natural range <>) of unsigned(MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
     signal credit_list_output : credit_list_output_t(2**VIRTUAL_PORT_CNT_LOG2-1 downto 0);
@@ -58,12 +56,22 @@ architecture Behavioral of loader_st_unit_controller is
 	signal curr_state : state_t := REC_MSG;
 	signal next_state : state_t;
 	
-	signal chan_active : slv((2**VIRTUAL_PORT_CNT_LOG2)-1 downto 0) := (others => '0');
-	signal buffer_base_list : buffer_addr_list((2**VIRTUAL_PORT_CNT_LOG2)-1 downto 0);
-	signal tag_index_list : tag_list((2**VIRTUAL_PORT_CNT_LOG2)-1 downto 0);
-	signal tag_top_list   : tag_list((2**VIRTUAL_PORT_CNT_LOG2)-1 downto 0);
+	type regslot is record
+	   buffer_base : slv(64-1 downto 0);
+	   tag_index   : unsigned(32-1 downto 0);
+	   tag_high    : unsigned(32-1 downto 0);
+	end record;
+	type regvec is array(natural range <>) of regslot;
 	
-	signal output_stream_iterator  : unsigned(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
+	signal chan_active : slv((2**VIRTUAL_PORT_CNT_LOG2)-1 downto 0) := (others => '0');
+	signal regmap : regvec((2**VIRTUAL_PORT_CNT_LOG2)-1 downto 0);
+	
+    signal regwrite_data : slv(63 downto 0);
+    signal regwrite_addr : slv(31 downto 0);
+    signal regwrite_chan : slv(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
+    signal regwrite_valid : std_logic;
+	
+	signal output_stream_iterator  : unsigned(VIRTUAL_PORT_CNT_LOG2-1 downto 0) := (others => '0');
     signal output_stream_candidate : unsigned(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 	signal output_stream_candidate_vld : std_logic := '0';
     signal output_stream_candidate_free_tuples : unsigned(MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
@@ -77,9 +85,9 @@ begin
 
    
     ap_start <= '1' when curr_state = START_LOADER else '0';
-    buffer_base <= buffer_base_list(to_integer(output_stream_selected));
-    tuple_base <= std_logic_vector(tag_index_list(to_integer(output_stream_selected)));
-    tuple_high <= std_logic_vector(tag_top_list(to_integer(output_stream_selected)));
+    buffer_base <= regmap(to_integer(output_stream_selected)).buffer_base;
+    tuple_base <= std_logic_vector(regmap(to_integer(output_stream_selected)).tag_index);
+    tuple_high <= std_logic_vector(regmap(to_integer(output_stream_selected)).tag_high);
     tuple_free(MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0) <= std_logic_vector(output_stream_selected_free_tuples);
     tuple_free(31 downto MEMORY_DEPTH_LOG2_OUTPUT) <= (others => '0');
     active_chan <= std_logic_vector(output_stream_selected);
@@ -97,28 +105,17 @@ begin
                 curr_state <= next_state;
             
                 if (curr_state = REC_MSG) then
-                    
-                    if is1(stream_core_s_status.valid) AND is1(stream_core_s_ready) then
-                        assert is1(curr_input_active) OR (stream_core_s_status.ptype = TLAST_MASK_HARDEND_3INVALID) report "Register accesses must hard end circuit after first tuple!" severity failure; 
-                        
-                        case input_reg is
-                        
-                            when START_REG_ADDR         =>  if is0(curr_input_active) then
-                                                                chan_active(to_integer(curr_input_chan)) <= '1';
-                                                            end if;
-        
-                            when BUFFER_BASE_REG_ADDR   =>  if is0(curr_input_active) then
-                                                                buffer_base_list(to_integer(curr_input_chan)) <= stream_core_s_tuples(0).value;
-                                                            end if;
-                                                            
-                            when REQ_TAG_RANGE_REG_ADDR =>  if is0(curr_input_active) then
-                                                                tag_index_list(to_integer(curr_input_chan)) <= unsigned(stream_core_s_tuples(0).value(32-1 downto 0));
-                                                                tag_top_list(to_integer(curr_input_chan)) <= unsigned(stream_core_s_tuples(0).value(64-1 downto 32));
-                                                            end if;
-                                                            
-                            when others                 =>  report "Illegal register write" severity failure;
+                    if is1(regwrite_valid) then
+                        case (to_integer(unsigned(regwrite_addr))) is
+                            when START_REG_ADDR =>          chan_active(to_integer(unsigned(regwrite_chan)))            <= '1';
+                            when BUFFER_BASE_REG_ADDR =>    regmap(to_integer(unsigned(regwrite_chan))).buffer_base     <= regwrite_data(63 downto 0);
+                            when REQ_TAG_INDEX_REG_ADDR =>  regmap(to_integer(unsigned(regwrite_chan))).tag_index       <= unsigned(regwrite_data(31 downto 0));
+                            when REQ_TAG_HIGH_REG_ADDR =>   regmap(to_integer(unsigned(regwrite_chan))).tag_high        <= unsigned(regwrite_data(31 downto 0));
+                            when others => report "ERROR in regaccess decoding" severity failure;
                         end case;
-                    elsif (next_state = START_LOADER) then
+                    end if;
+                    
+                    if (next_state = START_LOADER) then
                         output_stream_selected <= output_stream_candidate;
                         output_stream_selected_free_tuples <= output_stream_candidate_free_tuples;
                     end if;
@@ -126,13 +123,43 @@ begin
                 else
                     
                     if is1(new_tuple_base_vld) then
-                        tag_index_list(to_integer(output_stream_selected)) <= unsigned(new_tuple_base);
+                        regmap(to_integer(output_stream_selected)).tag_index <= unsigned(new_tuple_base);
+                        if NOT(unsigned(new_tuple_base) < regmap(to_integer(output_stream_selected)).tag_high) then
+                            chan_active(to_integer(output_stream_selected)) <= '0';
+                        end if;
                     end if;
                     
                 end if;
             end if;
         end if;
     end process;
+    
+    regproc: entity libramen.regfilter
+    generic map (
+        TUPPLE_COUNT => 1,
+        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2,
+        CHAN_ADDR_BY_CDEST => true,
+        HIGH_REG_ADDR => REQ_TAG_HIGH_REG_ADDR,
+        INPUT_CONTAINS_DATA => false
+    ) port map (
+        ap_clk => ap_clk,
+        rst_n => rst_n,
+        
+        regwrite_data => regwrite_data,
+        regwrite_addr => regwrite_addr,
+        regwrite_chan => regwrite_chan,
+        regwrite_valid => regwrite_valid,
+        
+        stream_s_tuples  => stream_core_s_tuples,
+        stream_s_status  => stream_core_s_status,
+        stream_s_ready   => OPEN,
+        stream_s_ldest   => (others => '0'),
+        
+        stream_m_tuples  => OPEN,
+        stream_m_status  => OPEN,
+        stream_m_ready   => '1',
+        stream_m_ldest   => OPEN
+    );
     
     select_output_stream: process (ap_clk)
     begin

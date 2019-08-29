@@ -34,6 +34,7 @@ Port (
 	chan_req : in slv(VIRTUAL_PORT_CNT_LOG2_INPUT-1 downto 0);
 	chan_req_valid : in std_logic;
 	chan_req_ready : out std_logic;
+	chan_clear_outstanding : in std_logic;
 	
     stream_core_s_tuples  : in tuple_vec(TUPPLE_COUNT-1 downto 0);
     stream_core_s_status  : in stream_status;
@@ -79,6 +80,7 @@ begin
         chan_req => chan_req,
         chan_req_valid => chan_req_valid,
         chan_req_ready => chan_req_ready,
+        chan_clear_outstanding => chan_clear_outstanding,
     
         input_out_chan => stream_core_m_ldest,
         input_out_chan_valid => stream_core_m_status.valid,

@@ -61,8 +61,7 @@ begin
     compute_cdest: process (ALL)
         variable tmp : outport_id;
     begin
-        if is1(stream_s_status.valid) then
-            
+        if is1(stream_s_status.valid) then    
             if (ENABLE_INTERNETWORK_ROUTING)  then
                 if subnet_addr /= SUBNET_IDENTITY then
                     tmp := (others => '0');
@@ -95,7 +94,7 @@ begin
         port_req <= (others => '0'); 
         port_req(to_integer(cdest_tmp)) <= cdest_tmp_decode_valid;
         
-        if is0(cdest_tmp_decode_valid) then
+        if is0(cdest_tmp_decode_valid) or is0(is_running) then
             stream_s_ready <= '0';
         else
             stream_s_ready <= stream_m_ready(to_integer(cdest_tmp));
@@ -111,16 +110,16 @@ begin
                 cdest_tmp_decode_valid_reg <= cdest_tmp_decode_valid;
         
                 if is0(is_running) then
-                    if is1(stream_s_status.valid AND stream_s_ready) then
+                    if is1(stream_s_status.valid) then
                         is_running <= '1';
                         if is0(cdest_tmp_decode_valid) then 
                             report "Illegal port reference." severity error;
                         end if;
                     end if;
-                else
-                    if is1(stream_s_status.valid AND stream_s_ready AND stream_s_status.yield) then
-                        is_running <= '0';
-                    end if;
+                end if;
+                
+                if is1(stream_s_status.valid AND stream_s_ready AND stream_s_status.yield) then
+                    is_running <= '0';
                 end if;
                 
             end if;

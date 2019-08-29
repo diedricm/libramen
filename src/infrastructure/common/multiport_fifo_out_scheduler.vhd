@@ -89,6 +89,6 @@ begin
         end loop;
     end process;
     
-    assert MAX_CORE_PIPLINE_DEPTH >= 8 report "roundrobin_scheduler: It is recommended to choose at least 8 for MAX_CORE_PIPLINE_DEPTH" severity warning;
+    assert MAX_CORE_PIPLINE_DEPTH >= 8 report "roundrobin_scheduler: It is recommended to choose at least 8 for MAX_CORE_PIPLINE_DEPTH. Provided: " & integer'IMAGE(MAX_CORE_PIPLINE_DEPTH) severity warning;
 
 end Behavioral;

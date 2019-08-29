@@ -167,7 +167,7 @@ begin
                 merged_data_write_lane <= to_slv(stream_s_tuples, stream_s_status);
                 merged_addr_write_lane <= std_logic_vector(flit_vaxis_dest) & std_logic_vector(write_ptr_list(to_integer(flit_vaxis_dest)));
                 
-                if NOT((stream_s_status.ptype = TLAST_MASK_SOFTEND_NO_DATA) OR (stream_s_status.ptype = TLAST_MASK_HARDEND_NO_DATA)) then
+                if NOT(stream_s_status.ptype = TLAST_MASK_SOFTEND_NO_DATA) then
                     write_enable <= '1';
                     
                     write_ptr_list(to_integer(flit_vaxis_dest)) <= write_ptr_list(to_integer(flit_vaxis_dest)) + 1;

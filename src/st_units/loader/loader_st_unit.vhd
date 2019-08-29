@@ -16,7 +16,6 @@ library libramen;
     
 entity loader_st_unit is
 generic (
-    SIM_MODE : boolean := false;
     VIRTUAL_PORT_CNT_LOG2 : natural := 4;
 	
 	--IN/OUT fifo parameters  
@@ -40,6 +39,10 @@ Port (
     m_axi_AWADDR : OUT STD_LOGIC_VECTOR(63 DOWNTO 0);
     m_axi_AWLEN : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
     m_axi_AWSIZE : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
+    m_axi_AWBURST : OUT STD_LOGIC_VECTOR(1 DOWNTO 0);
+    m_axi_AWLOCK : OUT STD_LOGIC_VECTOR(1 DOWNTO 0);
+    m_axi_AWCACHE : OUT STD_LOGIC_VECTOR(3 DOWNTO 0);
+    m_axi_AWPROT : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
     m_axi_AWVALID : OUT STD_LOGIC;
     m_axi_AWREADY : IN STD_LOGIC;
     m_axi_WDATA : OUT STD_LOGIC_VECTOR(511 DOWNTO 0);
@@ -53,6 +56,10 @@ Port (
     m_axi_ARADDR : OUT STD_LOGIC_VECTOR(63 DOWNTO 0);
     m_axi_ARLEN : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
     m_axi_ARSIZE : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
+    m_axi_ARBURST : OUT STD_LOGIC_VECTOR(1 DOWNTO 0);
+    m_axi_ARLOCK : OUT STD_LOGIC_VECTOR(1 DOWNTO 0);
+    m_axi_ARCACHE : OUT STD_LOGIC_VECTOR(3 DOWNTO 0);
+    m_axi_ARPROT : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
     m_axi_ARVALID : OUT STD_LOGIC;
     m_axi_ARREADY : IN STD_LOGIC;
     m_axi_RDATA : IN STD_LOGIC_VECTOR(511 DOWNTO 0);
@@ -129,6 +136,7 @@ architecture Behavioral of loader_st_unit is
 	constant TUPPLE_COUNT : natural := 4;
     constant OFFLOAD_DEST_REPLACEMENT : boolean := true;
 	constant OFFLOAD_RETURN_HANDLING : boolean := true;
+	constant INPUT_CONTAINS_DATA : boolean := false;
     constant MEMORY_TYPE_INPUT : string := "distributed";
     constant MEMORY_DEPTH_LOG2_INPUT : natural := 3;
 	constant ALMOST_FULL_LEVEL_INPUT : natural := 2;
@@ -219,6 +227,7 @@ begin
         --Offload common vaxis tasks
         OFFLOAD_DEST_REPLACEMENT => OFFLOAD_DEST_REPLACEMENT,
         OFFLOAD_RETURN_HANDLING => OFFLOAD_RETURN_HANDLING,
+        INPUT_CONTAINS_DATA => INPUT_CONTAINS_DATA,
         
         --IN/OUT fifo parameters  
         VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2,
@@ -254,94 +263,60 @@ begin
         stream_ext_m_ready   => stream_m_ready
     );
 
---    hls_simmode_wrapper: if SIM_MODE generate
---        aximm_loader_sim : entity libramen.loader_st_unit_sim
---        generic map (
---            SIM_MEMORY_WORDS => 1024,
---            SIM_MEMORY_LATENCY => 10
---        ) port map (
-        
---        );
---        m_axi_AWADDR => (others => '0');
---        m_axi_AWLEN => (others => '0');
---        m_axi_AWSIZE => (others => '0');
---        m_axi_AWVALID => (others => '0');
---        m_axi_AWREADY => (others => '0');
---        m_axi_WDATA => (others => '0');
---        m_axi_WSTRB => (others => '0');
---        m_axi_WLAST => (others => '0');
---        m_axi_WVALID => (others => '0');
---        m_axi_WREADY => (others => '0');
---        m_axi_BRESP => (others => '0');
---        m_axi_BVALID => (others => '0');
---        m_axi_BREADY => (others => '0');
---        m_axi_ARADDR => (others => '0');
---        m_axi_ARLEN => (others => '0');
---        m_axi_ARSIZE => (others => '0');
---        m_axi_ARVALID => (others => '0');
---        m_axi_ARREADY => (others => '0');
---        m_axi_RDATA => (others => '0');
---        m_axi_RRESP => (others => '0');
---        m_axi_RLAST => (others => '0');
---        m_axi_RVALID => (others => '0');
---        m_axi_RREADY => (others => '0');
-    
---    else generate
-        aximm_loader : load_unit_hls_0
-        PORT MAP (
-            ap_clk => ap_clk,
-            ap_rst_n => rst_n,
-            ap_start => ap_start,
-            ap_done => ap_done,
-            ap_idle => ap_idle,
-            ap_ready => ap_ready,
-            m_axi_memory_if_V_AWADDR => m_axi_AWADDR,
-            m_axi_memory_if_V_AWLEN => m_axi_AWLEN,
-            m_axi_memory_if_V_AWSIZE => m_axi_AWSIZE,
-            m_axi_memory_if_V_AWBURST => OPEN,
-            m_axi_memory_if_V_AWLOCK => OPEN,
-            m_axi_memory_if_V_AWREGION => OPEN,
-            m_axi_memory_if_V_AWCACHE => OPEN,
-            m_axi_memory_if_V_AWPROT => OPEN,
-            m_axi_memory_if_V_AWQOS => OPEN,
-            m_axi_memory_if_V_AWVALID => m_axi_AWVALID,
-            m_axi_memory_if_V_AWREADY => m_axi_AWREADY,
-            m_axi_memory_if_V_WDATA => m_axi_WDATA,
-            m_axi_memory_if_V_WSTRB => m_axi_WSTRB,
-            m_axi_memory_if_V_WLAST => m_axi_WLAST,
-            m_axi_memory_if_V_WVALID => m_axi_WVALID,
-            m_axi_memory_if_V_WREADY => m_axi_WREADY,
-            m_axi_memory_if_V_BRESP => m_axi_BRESP,
-            m_axi_memory_if_V_BVALID => m_axi_BVALID,
-            m_axi_memory_if_V_BREADY => m_axi_BREADY,
-            m_axi_memory_if_V_ARADDR => m_axi_ARADDR,
-            m_axi_memory_if_V_ARLEN => m_axi_ARLEN,
-            m_axi_memory_if_V_ARSIZE => m_axi_ARSIZE,
-            m_axi_memory_if_V_ARBURST => OPEN,
-            m_axi_memory_if_V_ARLOCK => OPEN,
-            m_axi_memory_if_V_ARREGION => OPEN,
-            m_axi_memory_if_V_ARCACHE => OPEN,
-            m_axi_memory_if_V_ARPROT => OPEN,
-            m_axi_memory_if_V_ARQOS => OPEN,
-            m_axi_memory_if_V_ARVALID => m_axi_ARVALID,
-            m_axi_memory_if_V_ARREADY => m_axi_ARREADY,
-            m_axi_memory_if_V_RDATA => m_axi_RDATA,
-            m_axi_memory_if_V_RRESP => m_axi_RRESP,
-            m_axi_memory_if_V_RLAST => m_axi_RLAST,
-            m_axi_memory_if_V_RVALID => m_axi_RVALID,
-            m_axi_memory_if_V_RREADY => m_axi_RREADY,
-            output_r_TVALID => output_r_TVALID,
-            output_r_TREADY => output_r_TREADY,
-            output_r_TDATA => output_r_TDATA,
-            output_r_TLAST => output_r_TLAST,
-            output_r_TUSER => output_r_TUSER,
-            output_r_TDEST => output_r_TDEST,
-            buffer_base_V => buffer_base_V,
-            tuple_base_V => tuple_base_V,
-            tuple_high_V => tuple_high_V,
-            tuple_free_V => tuple_free_V,
-            new_tuple_base_V => new_tuple_base_V,
-            new_tuple_base_V_ap_vld => new_tuple_base_V_ap_vld
-        );
---    end generate;
+    aximm_loader : load_unit_hls_0
+    PORT MAP (
+        ap_clk => ap_clk,
+        ap_rst_n => rst_n,
+        ap_start => ap_start,
+        ap_done => ap_done,
+        ap_idle => ap_idle,
+        ap_ready => ap_ready,
+        m_axi_memory_if_V_AWADDR => m_axi_AWADDR,
+        m_axi_memory_if_V_AWLEN => m_axi_AWLEN,
+        m_axi_memory_if_V_AWSIZE => m_axi_AWSIZE,
+        m_axi_memory_if_V_AWBURST => m_axi_AWBURST,
+        m_axi_memory_if_V_AWLOCK => m_axi_AWLOCK,
+        m_axi_memory_if_V_AWREGION => OPEN,
+        m_axi_memory_if_V_AWCACHE => m_axi_AWCACHE,
+        m_axi_memory_if_V_AWPROT => m_axi_AWPROT,
+        m_axi_memory_if_V_AWQOS => OPEN,
+        m_axi_memory_if_V_AWVALID => m_axi_AWVALID,
+        m_axi_memory_if_V_AWREADY => m_axi_AWREADY,
+        m_axi_memory_if_V_WDATA => m_axi_WDATA,
+        m_axi_memory_if_V_WSTRB => m_axi_WSTRB,
+        m_axi_memory_if_V_WLAST => m_axi_WLAST,
+        m_axi_memory_if_V_WVALID => m_axi_WVALID,
+        m_axi_memory_if_V_WREADY => m_axi_WREADY,
+        m_axi_memory_if_V_BRESP => m_axi_BRESP,
+        m_axi_memory_if_V_BVALID => m_axi_BVALID,
+        m_axi_memory_if_V_BREADY => m_axi_BREADY,
+        m_axi_memory_if_V_ARADDR => m_axi_ARADDR,
+        m_axi_memory_if_V_ARLEN => m_axi_ARLEN,
+        m_axi_memory_if_V_ARSIZE => m_axi_ARSIZE,
+        m_axi_memory_if_V_ARBURST => m_axi_ARBURST,
+        m_axi_memory_if_V_ARLOCK => m_axi_ARLOCK,
+        m_axi_memory_if_V_ARREGION => OPEN,
+        m_axi_memory_if_V_ARCACHE => m_axi_ARCACHE,
+        m_axi_memory_if_V_ARPROT => m_axi_ARPROT,
+        m_axi_memory_if_V_ARQOS => OPEN,
+        m_axi_memory_if_V_ARVALID => m_axi_ARVALID,
+        m_axi_memory_if_V_ARREADY => m_axi_ARREADY,
+        m_axi_memory_if_V_RDATA => m_axi_RDATA,
+        m_axi_memory_if_V_RRESP => m_axi_RRESP,
+        m_axi_memory_if_V_RLAST => m_axi_RLAST,
+        m_axi_memory_if_V_RVALID => m_axi_RVALID,
+        m_axi_memory_if_V_RREADY => m_axi_RREADY,
+        output_r_TVALID => output_r_TVALID,
+        output_r_TREADY => output_r_TREADY,
+        output_r_TDATA => output_r_TDATA,
+        output_r_TLAST => output_r_TLAST,
+        output_r_TUSER => output_r_TUSER,
+        output_r_TDEST => output_r_TDEST,
+        buffer_base_V => buffer_base_V,
+        tuple_base_V => tuple_base_V,
+        tuple_high_V => tuple_high_V,
+        tuple_free_V => tuple_free_V,
+        new_tuple_base_V => new_tuple_base_V,
+        new_tuple_base_V_ap_vld => new_tuple_base_V_ap_vld
+    );
 end Behavioral;

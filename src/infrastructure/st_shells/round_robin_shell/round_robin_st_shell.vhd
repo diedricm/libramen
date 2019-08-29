@@ -15,6 +15,7 @@ generic (
     --Offload common vaxis tasks
     OFFLOAD_DEST_REPLACEMENT : boolean := true;
 	OFFLOAD_RETURN_HANDLING : boolean := true;
+	INPUT_CONTAINS_DATA : boolean := true;
 	
 	--IN/OUT fifo parameters  
     VIRTUAL_PORT_CNT_LOG2 : natural := 4;
@@ -82,7 +83,8 @@ begin
     	TUPPLE_COUNT => TUPPLE_COUNT,
         OFFLOAD_DEST_REPLACEMENT => OFFLOAD_DEST_REPLACEMENT,
         OFFLOAD_RETURN_HANDLING => OFFLOAD_RETURN_HANDLING,
-        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2
+        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2,
+        INPUT_CONTAINS_DATA => INPUT_CONTAINS_DATA
     ) port map (
         ap_clk => ap_clk,
         rst_n => rst_n,

@@ -12,9 +12,9 @@ generic (
     VIRTUAL_PORT_CNT_LOG2 : natural := 4;
     
     --IN/OUT fifo parameters  
-    MEMORY_DEPTH_LOG2_OUTPUT : natural := 7;
-    ALMOST_FULL_LEVEL_OUTPUT : natural := 8;
-    MEMORY_TYPE_OUTPUT : string := "ultra"
+    MEMORY_DEPTH_LOG2_INPUT : natural := 7;
+    ALMOST_FULL_LEVEL_INPUT : natural := 8;
+    MEMORY_TYPE_INPUT : string := "ultra"
 );
 Port (
 
@@ -32,6 +32,10 @@ Port (
     m_axi_AWADDR : OUT STD_LOGIC_VECTOR(63 DOWNTO 0);
     m_axi_AWLEN : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
     m_axi_AWSIZE : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
+    m_axi_AWBURST : OUT STD_LOGIC_VECTOR(1 DOWNTO 0);
+    m_axi_AWLOCK : OUT STD_LOGIC_VECTOR(1 DOWNTO 0);
+    m_axi_AWCACHE : OUT STD_LOGIC_VECTOR(3 DOWNTO 0);
+    m_axi_AWPROT : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
     m_axi_AWVALID : OUT STD_LOGIC;
     m_axi_AWREADY : IN STD_LOGIC;
     m_axi_WDATA : OUT STD_LOGIC_VECTOR(511 DOWNTO 0);
@@ -45,6 +49,10 @@ Port (
     m_axi_ARADDR : OUT STD_LOGIC_VECTOR(63 DOWNTO 0);
     m_axi_ARLEN : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
     m_axi_ARSIZE : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
+    m_axi_ARBURST : OUT STD_LOGIC_VECTOR(1 DOWNTO 0);
+    m_axi_ARLOCK : OUT STD_LOGIC_VECTOR(1 DOWNTO 0);
+    m_axi_ARCACHE : OUT STD_LOGIC_VECTOR(3 DOWNTO 0);
+    m_axi_ARPROT : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
     m_axi_ARVALID : OUT STD_LOGIC;
     m_axi_ARREADY : IN STD_LOGIC;
     m_axi_RDATA : IN STD_LOGIC_VECTOR(511 DOWNTO 0);
@@ -128,19 +136,19 @@ architecture Behavioral of store_st_unit is
     constant REQ_TAG_RANGE_REG_ADDR : natural := 4;
     
     constant TUPPLE_COUNT : natural := 4;
-    constant OFFLOAD_DEST_REPLACEMENT : boolean := true;
-    constant OFFLOAD_RETURN_HANDLING : boolean := true;
-    constant LFSR_INSTEAD_OF_SEQ_ORDER : boolean := false;
-    constant CREDIT_SENSITIVE_SCHEDULE : boolean := true;
-    constant MEMORY_TYPE_INPUT : string := "distributed";
-    constant MEMORY_DEPTH_LOG2_INPUT : natural := 3;
-    constant ALMOST_FULL_LEVEL_INPUT : natural := 2;
+    constant MEMORY_TYPE_OUTPUT : string := "distributed";
+    constant MEMORY_DEPTH_LOG2_OUTPUT : natural := 3;
+    constant ALMOST_FULL_LEVEL_OUTPUT : natural := 8;
     
     signal credits_list_out_input_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
     
     signal stream_core_s_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
     signal stream_core_s_status  : stream_status;
     signal stream_core_s_ready   : std_logic;
+    
+    signal stream_core_x_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
+    signal stream_core_x_status  : stream_status;
+    signal stream_core_x_ready   : std_logic;
     
     signal stream_core_m_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
     signal stream_core_m_status  : stream_status;
@@ -155,13 +163,17 @@ architecture Behavioral of store_st_unit is
     signal chan_req : slv(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 	signal chan_req_valid : std_logic;
 	signal chan_req_ready : std_logic;
+    signal chan_clear_outstanding : std_logic;
     
-    signal buffer_base_V : STD_LOGIC_VECTOR(63 DOWNTO 0);
-    signal tuple_base_V : STD_LOGIC_VECTOR(31 DOWNTO 0);
-    signal tuple_high_V : STD_LOGIC_VECTOR(31 DOWNTO 0);
-    signal tuple_free_V : STD_LOGIC_VECTOR(31 DOWNTO 0);
-    signal new_tuple_base_V : STD_LOGIC_VECTOR(31 DOWNTO 0);
-    signal new_tuple_base_V_ap_vld : STD_LOGIC;
+    signal regentry_active : STD_LOGIC_VECTOR(0 DOWNTO 0);
+    signal regentry_buffer_base : STD_LOGIC_VECTOR(63 DOWNTO 0);
+    signal regentry_buffer_iterator : STD_LOGIC_VECTOR(31 DOWNTO 0);
+    signal regentry_buffer_length : STD_LOGIC_VECTOR(31 DOWNTO 0);
+    signal regentry_return_addr : STD_LOGIC_VECTOR(13 DOWNTO 0);
+    signal regentry_return_value : STD_LOGIC_VECTOR(7 DOWNTO 0);
+    signal block_write_count : STD_LOGIC_VECTOR(11 DOWNTO 0);
+    signal fills_buffer : STD_LOGIC;
+    signal agg_result : STD_LOGIC_VECTOR(31 DOWNTO 0);
     
     signal output_r_TVALID : STD_LOGIC;
     signal output_r_TREADY : STD_LOGIC;
@@ -169,6 +181,13 @@ architecture Behavioral of store_st_unit is
     signal output_r_TLAST : STD_LOGIC_VECTOR(0 DOWNTO 0);
     signal output_r_TUSER : STD_LOGIC_VECTOR(2 DOWNTO 0);
     signal output_r_TDEST : STD_LOGIC_VECTOR(13 DOWNTO 0);
+    
+    signal stream_in_TVALID : STD_LOGIC;
+    signal stream_in_TREADY : STD_LOGIC;
+    signal stream_in_TDATA : STD_LOGIC_VECTOR(383 DOWNTO 0);
+    signal stream_in_TUSER : STD_LOGIC_VECTOR(2 DOWNTO 0);
+    signal stream_in_TDEST : STD_LOGIC_VECTOR(13 DOWNTO 0);
+    signal stream_in_TLAST : STD_LOGIC_VECTOR(0 DOWNTO 0);
     
     signal active_chan : slv(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 begin
@@ -183,41 +202,63 @@ begin
         output_r_TREADY <= stream_core_m_ready;
         
         for i in 0 to 3 loop
-            stream_core_m_tuples(i).value <= output_r_TDATA((i+1)*64-1 downto i*64);
-            stream_core_m_tuples(i).tag <= output_r_TDATA((i+1)*32+(4*64)-1 downto i*32+(4*64));
+            stream_core_m_tuples(i).value <= output_r_TDATA(i*96+64-1 downto i*96);
+            stream_core_m_tuples(i).tag <= output_r_TDATA(i*96+96-1 downto i*96+64);
         end loop;
-        
-        
     end process;
-
-    controller: entity libramen.loader_st_unit_controller
+    
+    remap_input_stream: process (ALL)
+    begin
+        stream_in_TVALID <= stream_core_x_status.valid;
+        stream_in_TLAST(0) <= stream_core_x_status.yield;
+        stream_in_TUSER <= stream_core_x_status.ptype;
+        stream_in_TDEST <= stream_core_x_status.cdest;
+        stream_core_x_ready <= stream_in_TREADY;
+        
+        for i in 0 to 3 loop
+            stream_in_TDATA(i*96+64-1 downto i*96) <= stream_core_x_tuples(i).value;
+            stream_in_TDATA(i*96+96-1 downto i*96+64) <= stream_core_x_tuples(i).tag;
+        end loop;
+    end process;
+   
+    controller: entity libramen.store_st_unit_controller
     generic map (
         VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2, 
-        MEMORY_DEPTH_LOG2_OUTPUT => MEMORY_DEPTH_LOG2_OUTPUT
+        MEMORY_DEPTH_LOG2_INPUT => MEMORY_DEPTH_LOG2_INPUT
     ) port map (
     
         ap_clk => ap_clk,
         rst_n => rst_n,
     
-        credits_list_out_input => credits_list_out_input_buffer,
+        credits_list_out_input_buffer => credits_list_out_input_buffer,
         
-        stream_core_s_tuples(0) => stream_core_s_tuples(0),
-        stream_core_s_status => stream_core_s_status,
-        stream_core_s_ready  => stream_core_s_ready,
+        chan_req => chan_req,
+        chan_req_valid => chan_req_valid,
+        chan_req_ready => chan_req_ready,
+        chan_clear_outstanding => chan_clear_outstanding,
         
-        active_chan => active_chan,
+        stream_s_tuples => stream_core_s_tuples,
+        stream_s_status => stream_core_s_status,
+        stream_s_ready  => stream_core_s_ready,
+        
+        stream_m_tuples => stream_core_x_tuples,
+        stream_m_status => stream_core_x_status,
+        stream_m_ready  => stream_core_x_ready,
         
         ap_start => ap_start,
         ap_done  => ap_done,
         ap_idle  => ap_idle,
         ap_ready => ap_ready,
         
-        buffer_base => buffer_base_V,
-        tuple_base => tuple_base_V,
-        tuple_high => tuple_high_V,
-        tuple_free => tuple_free_V,
-        new_tuple_base => new_tuple_base_V,
-        new_tuple_base_vld => new_tuple_base_V_ap_vld
+        regentry_active => regentry_active,
+        regentry_buffer_base => regentry_buffer_base,
+        regentry_buffer_iterator => regentry_buffer_iterator,
+        regentry_buffer_length => regentry_buffer_length,
+        regentry_return_addr => regentry_return_addr,
+        regentry_return_value => regentry_return_value,
+        block_write_count => block_write_count,
+        fills_buffer => fills_buffer,
+        agg_result => agg_result
     );
 
     shell: entity libramen.request_st_shell
@@ -244,6 +285,7 @@ begin
         chan_req => chan_req,
         chan_req_valid => chan_req_valid,
         chan_req_ready => chan_req_ready,
+        chan_clear_outstanding => chan_clear_outstanding,
         
         stream_core_s_tuples  => stream_core_m_tuples,
         stream_core_s_status  => stream_core_m_status,
@@ -268,11 +310,11 @@ begin
         m_axi_memory_if_V_AWADDR => m_axi_AWADDR,
         m_axi_memory_if_V_AWLEN => m_axi_AWLEN,
         m_axi_memory_if_V_AWSIZE => m_axi_AWSIZE,
-        m_axi_memory_if_V_AWBURST => OPEN,
-        m_axi_memory_if_V_AWLOCK => OPEN,
+        m_axi_memory_if_V_AWBURST => m_axi_AWBURST,
+        m_axi_memory_if_V_AWLOCK => m_axi_AWLOCK,
         m_axi_memory_if_V_AWREGION => OPEN,
-        m_axi_memory_if_V_AWCACHE => OPEN,
-        m_axi_memory_if_V_AWPROT => OPEN,
+        m_axi_memory_if_V_AWCACHE => m_axi_AWCACHE,
+        m_axi_memory_if_V_AWPROT => m_axi_AWPROT,
         m_axi_memory_if_V_AWQOS => OPEN,
         m_axi_memory_if_V_AWVALID => m_axi_AWVALID,
         m_axi_memory_if_V_AWREADY => m_axi_AWREADY,
@@ -287,11 +329,11 @@ begin
         m_axi_memory_if_V_ARADDR => m_axi_ARADDR,
         m_axi_memory_if_V_ARLEN => m_axi_ARLEN,
         m_axi_memory_if_V_ARSIZE => m_axi_ARSIZE,
-        m_axi_memory_if_V_ARBURST => OPEN,
-        m_axi_memory_if_V_ARLOCK => OPEN,
+        m_axi_memory_if_V_ARBURST => m_axi_ARBURST,
+        m_axi_memory_if_V_ARLOCK => m_axi_ARLOCK,
         m_axi_memory_if_V_ARREGION => OPEN,
-        m_axi_memory_if_V_ARCACHE => OPEN,
-        m_axi_memory_if_V_ARPROT => OPEN,
+        m_axi_memory_if_V_ARCACHE => m_axi_ARCACHE,
+        m_axi_memory_if_V_ARPROT => m_axi_ARPROT,
         m_axi_memory_if_V_ARQOS => OPEN,
         m_axi_memory_if_V_ARVALID => m_axi_ARVALID,
         m_axi_memory_if_V_ARREADY => m_axi_ARREADY,
@@ -318,14 +360,14 @@ begin
         output_r_TUSER => output_r_TUSER,
         output_r_TDEST => output_r_TDEST,
         output_r_TLAST => output_r_TLAST,
-        agg_result_V => agg_result_V,
+        agg_result_V => agg_result,
         regentry_active => regentry_active,
-        regentry_buffer_base_V => regentry_buffer_base_V,
-        regentry_buffer_iterator_V => regentry_buffer_iterator_V,
-        regentry_buffer_length_V => regentry_buffer_length_V,
-        regentry_return_addr_V => regentry_return_addr_V,
-        regentry_return_value_V => regentry_return_value_V,
-        block_write_count_V => block_write_count_V,
+        regentry_buffer_base_V => regentry_buffer_base,
+        regentry_buffer_iterator_V => regentry_buffer_iterator,
+        regentry_buffer_length_V => regentry_buffer_length,
+        regentry_return_addr_V => regentry_return_addr,
+        regentry_return_value_V => regentry_return_value,
+        block_write_count_V => block_write_count,
         fills_buffer => fills_buffer
     );
 end Behavioral;

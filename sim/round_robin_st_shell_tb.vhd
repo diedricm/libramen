@@ -117,7 +117,7 @@ begin
             RANDOMIZE_CDEST => false,
             SEED => i,
             TEST_PAYLOAD => DUMMY_CONNECTION_VEC(i),
-            RANDOM_YIELDS => false
+            RANDOM_YIELDS => true
         ) port map (
             clk => ap_clk,
             rstn => rst_n,
