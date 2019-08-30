@@ -114,14 +114,14 @@ begin
                         2*16+0, (2**16)*0+1,     0, --store ch0, RETURN_DEST_REG_ADDR
                         2*16+0, (2**16)*0+0,     2, --store ch0, START_REG_ADDR
                         
-                        1*16+3, 5,   700, --load ch3, REQ_TAG_HIGH_REG_ADDR 
+                        1*16+3, 5,   704, --load ch3, REQ_TAG_HIGH_REG_ADDR 
                         1*16+3, 4,     0, --load ch3, REQ_TAG_INDEX_REG_ADDR
                         1*16+3, 3,128*64, --load ch3, BUFFER_BASE_REG_ADDR @block 128
                         1*16+3, 2,2*16+1, --load ch3, FWD_DEST_REG_ADDR store ch1
                         1*16+3, 1,     0, --load ch3, RETURN_DEST_REG_ADDR
                         1*16+3, 0,     3, --load ch3, START_REG_ADDR
 
-                        1*16+4, 5,   150, --load ch4, REQ_TAG_HIGH_REG_ADDR 
+                        1*16+4, 5,   152, --load ch4, REQ_TAG_HIGH_REG_ADDR 
                         1*16+4, 4,     0, --load ch4, REQ_TAG_INDEX_REG_ADDR
                         1*16+4, 3,     0, --load ch4, BUFFER_BASE_REG_ADDR @block 0
                         1*16+4, 2,2*16+0, --load ch4, FWD_DEST_REG_ADDR store ch0

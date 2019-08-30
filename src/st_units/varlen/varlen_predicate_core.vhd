@@ -45,15 +45,15 @@ architecture Behavioral of varlen_predicate_core is
 	type single_instruction_match_decode_list is array (natural range <>) of instruction_match_decode_tuple;
 
 	type vlen_instruction is record
-		matchword			: sym_vec(MATCHWIDTH-1 downto 0);									-- 32bit
+		matchword			: sym_vec(MATCHWIDTH-1 downto 0);							-- 32bit
 		replacement_pos		: sym_id_vec(MATCHWIDTH-1 downto 0);								--+ 8bit
 		jmp_vector			: jump_addr_vec(INSTR_BRANCHES_COUNT-1 downto 0);					--+50bit
-		match_decode_vec	: single_instruction_match_decode_list(2**MATCHWIDTH-1 downto 0);	--+96bit
-		required_matchwords	: unsigned(SYMBOL_ID-1 downto 0);									--+ 2bit
-		is_valid_end_state	: std_logic;														--+ 1bit
-		is_end_state        : std_logic;														--+ 1bit
-	end record vlen_instruction;																--------
-	type instr_mem is array (natural range <>) of vlen_instruction;                             --190bit
+		match_decode_vec	: single_instruction_match_decode_list(2**MATCHWIDTH-1 downto 0);				--+96bit
+		required_matchwords	: unsigned(SYMBOL_ID-1 downto 0);								--+ 2bit
+		is_valid_end_state	: std_logic;											--+ 1bit
+		is_end_state        : std_logic;											--+ 1bit
+	end record vlen_instruction;													--------
+	type instr_mem is array (natural range <>) of vlen_instruction;					                                --190bit
 
 	signal matchword_buffer, matchword_buffer_reg  : sym_vec(MATCHWIDTH-1 downto 0);
 	signal valid_matchwords, valid_matchwords_reg : unsigned(SYMBOL_ID-1 downto 0);

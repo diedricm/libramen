@@ -29,6 +29,8 @@ Port (
 	stream_s_status  : in stream_status;
 	stream_s_ready   : out std_logic;
 	
+	stream_m_tuples  : out tuple_vec(TUPPLE_COUNT-1 downto 0);
+	stream_m_status  : out stream_status;
 	stream_m_ready   : in std_logic_vector(OUTPORT_CNT-1 downto 0)
 );
 end switch_port_client;
@@ -94,10 +96,15 @@ begin
         port_req <= (others => '0'); 
         port_req(to_integer(cdest_tmp)) <= cdest_tmp_decode_valid;
         
+        stream_m_tuples <= stream_s_tuples;
+        stream_m_status <= stream_s_status;
+        
         if is0(cdest_tmp_decode_valid) or is0(is_running) then
             stream_s_ready <= '0';
+            stream_m_status.valid <= '0';
         else
             stream_s_ready <= stream_m_ready(to_integer(cdest_tmp));
+            stream_m_status.valid <= stream_s_status.valid;
         end if;    
     end process;
 

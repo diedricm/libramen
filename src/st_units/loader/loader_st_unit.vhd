@@ -142,6 +142,7 @@ architecture Behavioral of loader_st_unit is
 	constant ALMOST_FULL_LEVEL_INPUT : natural := 2;
 	
     signal credits_list_out_output_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
+    signal credits_list_out_input_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
     
     signal stream_core_s_tuples  : tuple_vec(TUPPLE_COUNT-1 downto 0);
     signal stream_core_s_status  : stream_status;
@@ -198,6 +199,7 @@ begin
         ap_clk => ap_clk,
         rst_n => rst_n,
     
+        credits_list_out_input_buffer => credits_list_out_input_buffer,
         credits_list_out_output_buffer => credits_list_out_output_buffer,
         
         stream_core_s_tuples(0) => stream_core_s_tuples(0),
@@ -242,7 +244,7 @@ begin
         ap_clk => ap_clk,
         rst_n => rst_n,
         
-        credits_list_out_input => OPEN,
+        credits_list_out_input => credits_list_out_input_buffer,
         credits_list_out_output => credits_list_out_output_buffer,
         
         stream_core_s_tuples => stream_core_m_tuples,

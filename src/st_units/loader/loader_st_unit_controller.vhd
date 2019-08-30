@@ -10,6 +10,7 @@ library libramen;
 entity loader_st_unit_controller is
 generic (
     VIRTUAL_PORT_CNT_LOG2 : natural := 4;
+    MEMORY_DEPTH_LOG2_INPUT : natural := 3;
 	MEMORY_DEPTH_LOG2_OUTPUT : natural := 7
 );
 Port (
@@ -17,6 +18,7 @@ Port (
 	ap_clk : in std_logic;
 	rst_n : in std_logic;
 
+    credits_list_out_input_buffer : in std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
     credits_list_out_output_buffer : in std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
 	
     stream_core_s_tuples  : in tuple_vec(0 downto 0);
@@ -51,7 +53,10 @@ architecture Behavioral of loader_st_unit_controller is
 
 	type credit_list_output_t is array (natural range <>) of unsigned(MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
     signal credit_list_output : credit_list_output_t(2**VIRTUAL_PORT_CNT_LOG2-1 downto 0);
-	
+	type credit_list_input_t is array (natural range <>) of unsigned(MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
+    signal credit_list_input : credit_list_input_t(2**VIRTUAL_PORT_CNT_LOG2-1 downto 0);
+    constant max_credit_input : unsigned(MEMORY_DEPTH_LOG2_INPUT-1 downto 0) := (others => '1');
+    
 	type state_t is (REC_MSG, START_LOADER, WAIT_ON_LOADER);
 	signal curr_state : state_t := REC_MSG;
 	signal next_state : state_t;
@@ -78,9 +83,6 @@ architecture Behavioral of loader_st_unit_controller is
 	
     signal output_stream_selected  : unsigned(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 	signal output_stream_selected_free_tuples : unsigned(MEMORY_DEPTH_LOG2_OUTPUT-1 downto 0);
-	
-	signal curr_input_chan : unsigned(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
-    signal curr_input_active : std_logic;
 begin
 
    
@@ -92,10 +94,8 @@ begin
     tuple_free(31 downto MEMORY_DEPTH_LOG2_OUTPUT) <= (others => '0');
     active_chan <= std_logic_vector(output_stream_selected);
     
-    stream_core_s_ready <= '1' when curr_state = REC_MSG else '0';
+    stream_core_s_ready <= '1';
     
-    curr_input_chan <= unsigned(stream_core_s_status.cdest(VIRTUAL_PORT_CNT_LOG2-1 downto 0));
-    curr_input_active <= chan_active(to_integer(curr_input_chan));
     main: process(ap_clk)
         variable input_reg : integer := to_integer(unsigned(stream_core_s_tuples(0).tag));
     begin
@@ -104,24 +104,22 @@ begin
             
                 curr_state <= next_state;
             
+                if is1(regwrite_valid) then
+                    case (to_integer(unsigned(regwrite_addr))) is
+                        when START_REG_ADDR =>          chan_active(to_integer(unsigned(regwrite_chan)))            <= '1';
+                        when BUFFER_BASE_REG_ADDR =>    regmap(to_integer(unsigned(regwrite_chan))).buffer_base     <= regwrite_data(63 downto 0);
+                        when REQ_TAG_INDEX_REG_ADDR =>  regmap(to_integer(unsigned(regwrite_chan))).tag_index       <= unsigned(regwrite_data(31 downto 0));
+                        when REQ_TAG_HIGH_REG_ADDR =>   regmap(to_integer(unsigned(regwrite_chan))).tag_high        <= unsigned(regwrite_data(31 downto 0));
+                        when others => report "ERROR in regaccess decoding" severity failure;
+                    end case;
+                end if;
+            
                 if (curr_state = REC_MSG) then
-                    if is1(regwrite_valid) then
-                        case (to_integer(unsigned(regwrite_addr))) is
-                            when START_REG_ADDR =>          chan_active(to_integer(unsigned(regwrite_chan)))            <= '1';
-                            when BUFFER_BASE_REG_ADDR =>    regmap(to_integer(unsigned(regwrite_chan))).buffer_base     <= regwrite_data(63 downto 0);
-                            when REQ_TAG_INDEX_REG_ADDR =>  regmap(to_integer(unsigned(regwrite_chan))).tag_index       <= unsigned(regwrite_data(31 downto 0));
-                            when REQ_TAG_HIGH_REG_ADDR =>   regmap(to_integer(unsigned(regwrite_chan))).tag_high        <= unsigned(regwrite_data(31 downto 0));
-                            when others => report "ERROR in regaccess decoding" severity failure;
-                        end case;
-                    end if;
-                    
                     if (next_state = START_LOADER) then
                         output_stream_selected <= output_stream_candidate;
                         output_stream_selected_free_tuples <= output_stream_candidate_free_tuples;
                     end if;
-                    
                 else
-                    
                     if is1(new_tuple_base_vld) then
                         regmap(to_integer(output_stream_selected)).tag_index <= unsigned(new_tuple_base);
                         if NOT(unsigned(new_tuple_base) < regmap(to_integer(output_stream_selected)).tag_high) then
@@ -162,15 +160,21 @@ begin
     );
     
     select_output_stream: process (ap_clk)
+        variable tmp : boolean;
     begin
         if rising_edge(ap_clk) then
             if is1(rst_n) then
+                tmp := false;
             
-                if is1(chan_active(to_integer(output_stream_iterator)))
-                        AND (credit_list_output(to_integer(output_stream_iterator)) < output_stream_candidate_free_tuples
+                if is1(chan_active(to_integer(output_stream_iterator))) then
+                    if credit_list_output(to_integer(output_stream_iterator)) > output_stream_candidate_free_tuples
                             OR is0(output_stream_candidate_vld)
-                            OR (output_stream_iterator = output_stream_candidate)
-                        ) then
+                            OR (output_stream_iterator = output_stream_candidate) then
+                        tmp := true;
+                    end if;
+                end if;
+                
+                if tmp then
                     output_stream_candidate <= output_stream_iterator;
                     output_stream_candidate_free_tuples <= credit_list_output(to_integer(output_stream_iterator));
                     output_stream_candidate_vld <= '1';
@@ -211,10 +215,14 @@ begin
         end case;
     end process;
     
-    credit_list_remap: process (credits_list_out_output_buffer)
+    credit_list_remap: process (ALL)
     begin
         for i in 0 to 2**VIRTUAL_PORT_CNT_LOG2-1 loop
             credit_list_output(i) <= unsigned(credits_list_out_output_buffer((i+1)*MEMORY_DEPTH_LOG2_OUTPUT-1 downto i*MEMORY_DEPTH_LOG2_OUTPUT));
+        end loop;
+        
+        for i in 0 to 2**VIRTUAL_PORT_CNT_LOG2-1 loop
+            credit_list_input(i) <= unsigned(credits_list_out_input_buffer((i+1)*MEMORY_DEPTH_LOG2_INPUT-1 downto i*MEMORY_DEPTH_LOG2_INPUT));
         end loop;
     end process;
 

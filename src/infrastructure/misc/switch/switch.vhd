@@ -43,6 +43,9 @@ architecture Behavioural of switch is
 
     signal port_req_grp : slv(OUTPORT_CNT*INPORT_CNT-1 downto 0) := (others => '0');
     signal output_ready : slv(OUTPORT_CNT*INPORT_CNT-1 downto 0) := (others => '0');
+    
+    signal stream_forward_tuples  : tuple_vec(OUTPORT_CNT*TUPPLE_COUNT-1 downto 0);
+    signal stream_forward_status : stream_status_vec(INPORT_CNT-1 downto 0);
 begin
 
     input_controll: for i in 0 to INPORT_CNT-1 generate
@@ -68,6 +71,8 @@ begin
             stream_s_status  => stream_s_status(i),
             stream_s_ready   => stream_s_ready(i),
             
+            stream_m_tuples  => stream_forward_tuples((i+1)*TUPPLE_COUNT-1 downto i*TUPPLE_COUNT),
+            stream_m_status  => stream_forward_status(i),
             stream_m_ready   => output_ready((i+1)*OUTPORT_CNT-1 downto i*OUTPORT_CNT)
         );
 	end generate;
@@ -88,8 +93,8 @@ begin
             
             port_req => req_tmp,
             
-            stream_s_tuples  => stream_s_tuples,
-            stream_s_status  => stream_s_status,
+            stream_s_tuples  => stream_forward_tuples,
+            stream_s_status  => stream_forward_status,
             stream_s_ready   => ready_tmp,
             
             stream_m_tuples  => stream_m_tuples((i+1)*TUPPLE_COUNT-1 downto i*TUPPLE_COUNT),

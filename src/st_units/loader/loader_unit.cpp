@@ -17,6 +17,7 @@ void block_load(
 		) {
 	for (int i = 0; i < read_count; i++) {
 #pragma HLS PIPELINE
+#pragma HLS LOOP_TRIPCOUNT min=1 max=64
 
 		to_next.write(memory_if[read_start + i]);
 	}
@@ -89,7 +90,7 @@ void dataflow_container(
 
 	hls::stream<ap_uint<BLOCK_SIZE_IN_BITS> > trn;
 #pragma HLS RESOURCE variable=trn core=FIFO_LUTRAM
-#pragma HLS STREAM variable=trn depth=32 dim=1
+#pragma HLS STREAM variable=trn depth=2 dim=1
 
 	block_load(memory_if, read_start, read_count, trn);
 
@@ -101,6 +102,28 @@ ap_uint<32> my_min ( ap_uint<32> A, ap_uint<32> B) {
 		return A;
 	else
 		return B;
+}
+
+void compute_new_numbers(
+		ap_uint<64> buffer_base,
+		ap_uint<32> tuple_base,
+		ap_uint<32> tuple_high,
+		ap_uint<32> tuple_free,
+		ap_uint<32>* new_tuple_base,
+		ap_uint<64>& new_base,
+		ap_uint<32>& readable_tuples,
+		ap_uint<32>& readable_blocks
+		) {
+#pragma HLS LATENCY max=0
+
+	//convert from byte to block array index and add to block converted tbase
+	new_base = (buffer_base / 64) + (tuple_base / 8);
+
+	readable_tuples = my_min(tuple_free * 4, tuple_high - tuple_base);
+	//round up
+	readable_blocks = (readable_tuples + 7) / 8;
+
+	*new_tuple_base = tuple_base + readable_blocks * 8;
 }
 
 void load_unit_hls(
@@ -120,14 +143,12 @@ void load_unit_hls(
 #pragma HLS INTERFACE axis register both port=output
 #pragma HLS INTERFACE m_axi depth=268435456 port=memory_if offset=off num_write_outstanding=0 max_read_burst_length=64 max_write_burst_length=2
 
-	//convert from byte to block array index and add to block converted tbase
-	ap_uint<64> new_base = (buffer_base / 64) + (tuple_base / 8);
+	ap_uint<64> new_base;
+	ap_uint<32> readable_tuples;
+	ap_uint<32> readable_blocks;
 
-	ap_uint<32> readable_tuples = my_min(tuple_free, tuple_high - tuple_base);
-	//round up
-	ap_uint<32> readable_blocks = (readable_tuples + 7) / 8;
+	compute_new_numbers(buffer_base, tuple_base, tuple_high, tuple_free, new_tuple_base, new_base, readable_tuples, readable_blocks);
 
 	dataflow_container(memory_if, new_base, readable_blocks, tuple_base, tuple_high, output);
 
-	*new_tuple_base =  readable_blocks * 8;
 }

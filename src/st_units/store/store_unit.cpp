@@ -140,10 +140,10 @@ ap_int<32> store_dataflow_region(
 #pragma HLS DATAFLOW
 
 	hls::stream<ap_uint<BLOCK_SIZE_IN_BITS/2> > stream_data_buffer_half;
-#pragma HLS STREAM variable=stream_data_buffer depth=1 dim=1
+#pragma HLS STREAM variable=stream_data_buffer depth=4 dim=1
 
 	hls::stream<ap_uint<BLOCK_SIZE_IN_BITS> > stream_data_buffer;
-#pragma HLS STREAM variable=stream_data_buffer depth=1 dim=1
+#pragma HLS STREAM variable=stream_data_buffer depth=4 dim=1
 
 	ap_int<32> tmp = store_stream_convert(stream_in, output, stream_data_buffer_half, block_write_count, regentry, fills_buffer);
 

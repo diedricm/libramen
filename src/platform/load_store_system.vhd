@@ -230,7 +230,7 @@ begin
         VIRTUAL_PORT_CNT_LOG2 => 4,
         
         --IN/OUT fifo parameters  
-        MEMORY_DEPTH_LOG2_OUTPUT => 6,
+        MEMORY_DEPTH_LOG2_OUTPUT => 7,
         ALMOST_FULL_LEVEL_OUTPUT => 8,
         MEMORY_TYPE_OUTPUT => "ultra"
     ) port map (
