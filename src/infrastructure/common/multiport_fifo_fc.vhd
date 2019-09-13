@@ -73,8 +73,7 @@ begin
     scheduler: entity libramen.multiport_fifo_out_scheduler
     generic map (	
         VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2_OUTPUT,
-        MEMORY_DEPTH_LOG2_OUTPUT => MEMORY_DEPTH_LOG2_OUTPUT,
-        MAX_CORE_PIPLINE_DEPTH => ALMOST_FULL_LEVEL_OUTPUT
+        MEMORY_DEPTH_LOG2_OUTPUT => MEMORY_DEPTH_LOG2_OUTPUT
     ) port map (
         clk => ap_clk,
         rst_n => rst_n,

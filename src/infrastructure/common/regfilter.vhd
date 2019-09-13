@@ -63,7 +63,7 @@ begin
         stream_m_ldest  <= stream_s_ldest;
         stream_s_ready  <= stream_m_ready;
         
-        if is1(input_chan_is_active) OR is0(reg_addr) OR (reg_addr > HIGH_REG_ADDR) OR is0(reg_addr) then
+        if is1(input_chan_is_active) OR (reg_addr > HIGH_REG_ADDR) OR is0(reg_addr) then
             stream_m_status.valid <= stream_s_status.valid;
         else
             stream_m_status.valid <= '0'; 

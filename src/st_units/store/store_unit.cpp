@@ -96,7 +96,6 @@ ap_int<32> store_stream_convert(
 	if (circuit_terminated) {
 		stream_data_buffer.write(new_buffer_index);
 		stream_data_buffer.write(new_buffer_index);
-		new_buffer_index = -new_buffer_index;
 
 		flit_quad result;
 		result.dest = regentry.return_addr;
@@ -125,13 +124,31 @@ void upsize(
 	}
 }
 
-ap_int<32> store_dataflow_region(
+void compute_write_length(
+		regslot regentry,
+		ap_uint<BUFFER_ADDR_LEN> free_credits_in_buffer,
+		ap_uint<BUFFER_ADDR_LEN> & block_write_count,
+		bool & fills_buffer
+		) {
+
+	ap_uint<BUFFER_ADDR_LEN> full_credits_in_buffer = (1 << BUFFER_ADDR_LEN) - 1 - free_credits_in_buffer;
+	ap_uint<BUFFER_ADDR_LEN> present_block_count = ((full_credits_in_buffer * 4) + BLOCK_SIZE_IN_TUPLE_VALS - 1) / BLOCK_SIZE_IN_TUPLE_VALS;
+
+	if (regentry.buffer_iterator + present_block_count * BLOCK_SIZE_IN_TUPLE_VALS >= regentry.buffer_length) {
+		present_block_count = (regentry.buffer_length - regentry.buffer_iterator + BLOCK_SIZE_IN_TUPLE_VALS - 1) / BLOCK_SIZE_IN_TUPLE_VALS;
+		fills_buffer = true;
+	} else {
+		fills_buffer = false;
+	}
+	block_write_count = present_block_count;
+}
+
+ap_int<32> store_unit_hls (
 		hls::stream<flit_quad> & stream_in,
 		hls::stream<flit_quad> & output,
 		ap_uint<BLOCK_SIZE_IN_BITS>* memory_if,
-		regslot regentry,
-		ap_uint<BUFFER_ADDR_LEN> block_write_count,
-		bool fills_buffer
+		ap_uint<BUFFER_ADDR_LEN> free_credits_in_buffer,
+		regslot regentry
 		) {
 #pragma HLS INTERFACE axis register both port=stream_in
 #pragma HLS INTERFACE axis register both port=output
@@ -139,11 +156,18 @@ ap_int<32> store_dataflow_region(
 
 #pragma HLS DATAFLOW
 
+	ap_uint<BUFFER_ADDR_LEN> block_write_count;
+	bool fills_buffer;
+
 	hls::stream<ap_uint<BLOCK_SIZE_IN_BITS/2> > stream_data_buffer_half;
+#pragma HLS RESOURCE variable=stream_data_buffer_half core=FIFO_LUTRAM
 #pragma HLS STREAM variable=stream_data_buffer depth=4 dim=1
 
 	hls::stream<ap_uint<BLOCK_SIZE_IN_BITS> > stream_data_buffer;
+#pragma HLS RESOURCE variable=stream_data_buffer core=FIFO_LUTRAM
 #pragma HLS STREAM variable=stream_data_buffer depth=4 dim=1
+
+	compute_write_length(regentry, free_credits_in_buffer, block_write_count, fills_buffer);
 
 	ap_int<32> tmp = store_stream_convert(stream_in, output, stream_data_buffer_half, block_write_count, regentry, fills_buffer);
 
@@ -152,130 +176,4 @@ ap_int<32> store_dataflow_region(
 	store_loop(stream_data_buffer, memory_if, regentry, block_write_count);
 
 	return tmp;
-}
-
-
-void store_unit_hls(
-		hls::stream<flit_quad> & input,
-		hls::stream<flit_quad> & output,
-		hls::stream<buffer_read_req> & stream_chan_req,
-		ap_uint<BLOCK_SIZE_IN_BITS>* memory_if,
-		ap_uint<PORT_CNT*BUFFER_ADDR_LEN> buffer_fill_levels
-		) {
-//#pragma HLS DATA_PACK variable=input
-//#pragma HLS DATA_PACK variable=output
-#pragma HLS INTERFACE ap_none port=buffer_fill_levels
-#pragma HLS INTERFACE axis register both port=input
-#pragma HLS INTERFACE axis register both port=output
-#pragma HLS INTERFACE axis register both port=stream_chan_req
-#pragma HLS INTERFACE m_axi depth=268435456 port=memory_if offset=off num_read_outstanding=0 max_write_burst_length=64 max_read_burst_length=2
-
-	static regslot regfile[PORT_CNT] = {{
-			.active = false,
-			.buffer_base = 0,
-			.buffer_iterator = 0,
-			.buffer_length = 0,
-			.return_addr = 0,
-			.return_value = 0
-	}};
-//#pragma HLS DATA_PACK variable=regfile
-
-
-	bool any_port_full = false;
-	ap_uint<PORT_CNT> most_full_port;
-	ap_uint<BUFFER_ADDR_LEN> most_full_fill_level = 0;
-	bool port_is_conf;
-	for (int i = 0; i < PORT_CNT; i++) {
-		ap_uint<BUFFER_ADDR_LEN> inport_fill_level = buffer_fill_levels.range((i+1)*BUFFER_ADDR_LEN-1, i*BUFFER_ADDR_LEN);
-
-		//register read
-		if (!regfile[i].active) {
-			if (inport_fill_level > 0) {
-				any_port_full = true;
-				most_full_port = i;
-				most_full_fill_level = inport_fill_level;
-				port_is_conf = true;
-			}
-		} else if (regfile[i].buffer_iterator < regfile[i].buffer_length && !port_is_conf) {
-			any_port_full = true;
-			most_full_port = i;
-			most_full_fill_level = inport_fill_level;
-		}
-	}
-
-	std::cout << "most_full_fill_level " << most_full_fill_level << std::endl;
-
-	if (any_port_full) {
-		if (port_is_conf) {
-			//PORT CONF
-			buffer_read_req tmp;
-			tmp.port_id = most_full_port;
-			tmp.req_tuples = 1;
-			stream_chan_req.write(tmp);
-
-			flit_quad reg_pack = input.read();
-			//flit_quad reg_pack = {};
-//#pragma HLS DATA_PACK variable=reg_pack
-			ap_uint<PORT_CNT> regconf_dest = get_tag(reg_pack, 0).range(31, 16);
-			ap_uint<3> regconf_regaddr = get_tag(reg_pack, 0).range(15, 0);
-
-			switch (regconf_regaddr) {
-			case START_REG_ADDR:
-				regfile[most_full_port].return_value = get_value(reg_pack, 0).range(7, 0);
-				regfile[most_full_port].active = true;
-				break;
-
-			case RETURN_CDEST_REG_ADDR:
-				regfile[most_full_port].return_addr = get_value(reg_pack, 0).range(13, 0);
-				break;
-
-			case BUFFER_BASE_REG_ADDR:
-				regfile[most_full_port].buffer_base = get_value(reg_pack, 0) >> 6;
-				break;
-
-			case TUPLE_ITERATOR_REG_ADDR:
-				regfile[most_full_port].buffer_iterator = get_value(reg_pack, 0).range(31, 0);
-				break;
-
-			case TUPLE_BUFFER_HIGH_REG_ADDR:
-				regfile[most_full_port].buffer_length = get_value(reg_pack, 0).range(31, 0);
-				break;
-			}
-
-		} else {
-
-			//BUFFER WRITE
-			bool fills_buffer = false;
-			ap_uint<BUFFER_ADDR_LEN> present_block_count = ((most_full_fill_level * 4) + BLOCK_SIZE_IN_TUPLE_VALS - 1) / BLOCK_SIZE_IN_TUPLE_VALS;
-			std::cout << "present_block_count1: " << present_block_count << std::endl;
-			if (regfile[most_full_port].buffer_iterator + present_block_count * BLOCK_SIZE_IN_TUPLE_VALS >= regfile[most_full_port].buffer_length) {
-				present_block_count = (regfile[most_full_port].buffer_length - regfile[most_full_port].buffer_iterator + BLOCK_SIZE_IN_TUPLE_VALS - 1) / BLOCK_SIZE_IN_TUPLE_VALS;
-				fills_buffer = true;
-				std::cout << "present_block_count2: " << present_block_count << std::endl;
-			}
-
-			buffer_read_req tmp;
-			tmp.port_id = most_full_port;
-			tmp.req_tuples = present_block_count * BLOCK_SIZE_IN_TUPLE_VALS / 4;
-			stream_chan_req.write(tmp);
-
-			std::cout << "START DATAFLOW: buffer_base: " << regfile[most_full_port].buffer_base << " regfile[most_full_port].buffer_iterator: " << regfile[most_full_port].buffer_iterator  << "regfile[most_full_port].buffer_length" << regfile[most_full_port].buffer_length <<  " present_block_count: "  << present_block_count << " fills_buffer " << (fills_buffer ? "true" : "false") << std::endl;
-			ap_int<32> new_buffer_index = store_dataflow_region(input, output, memory_if, regfile[most_full_port], present_block_count, fills_buffer);
-
-			std::cout << "new_buffer_index " << new_buffer_index << std::endl;
-
-			if (new_buffer_index < 0) {
-				regfile[most_full_port].buffer_iterator = -new_buffer_index;
-			} else {
-				regfile[most_full_port].buffer_iterator = new_buffer_index;
-			}
-
-			if (fills_buffer || new_buffer_index < 0) {
-				regfile[most_full_port].active = false;
-				std::cout << "TERMINATE: buffer_base: " << regfile[most_full_port].buffer_base << " regfile[most_full_port].buffer_iterator: " << regfile[most_full_port].buffer_iterator  << "regfile[most_full_port].buffer_length" << regfile[most_full_port].buffer_length <<  " present_block_count: "  << present_block_count << " fills_buffer " << (fills_buffer ? "true" : "false") << std::endl;
-			}
-		}
-	}
-
-	return;
 }

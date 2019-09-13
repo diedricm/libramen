@@ -114,7 +114,7 @@ void compute_new_numbers(
 		ap_uint<32>& readable_tuples,
 		ap_uint<32>& readable_blocks
 		) {
-#pragma HLS LATENCY max=0
+//#pragma HLS LATENCY max=0
 
 	//convert from byte to block array index and add to block converted tbase
 	new_base = (buffer_base / 64) + (tuple_base / 8);
@@ -135,11 +135,11 @@ void load_unit_hls(
 		ap_uint<32> tuple_free,
 		ap_uint<32>* new_tuple_base
 		) {
-#pragma HLS INTERFACE ap_none port=buffer_base
-#pragma HLS INTERFACE ap_none port=tuple_base
-#pragma HLS INTERFACE ap_none port=tuple_high
-#pragma HLS INTERFACE ap_none port=tuple_free
-#pragma HLS INTERFACE ap_vld  port=new_tuple_base
+#pragma HLS INTERFACE ap_vld port=buffer_base
+#pragma HLS INTERFACE ap_vld port=tuple_base
+#pragma HLS INTERFACE ap_vld port=tuple_high
+#pragma HLS INTERFACE ap_vld port=tuple_free
+#pragma HLS INTERFACE ap_vld port=new_tuple_base
 #pragma HLS INTERFACE axis register both port=output
 #pragma HLS INTERFACE m_axi depth=268435456 port=memory_if offset=off num_write_outstanding=0 max_read_burst_length=64 max_write_burst_length=2
 

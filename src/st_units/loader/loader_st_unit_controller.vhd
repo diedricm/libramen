@@ -32,6 +32,7 @@ Port (
     ap_idle : in STD_LOGIC;
     ap_ready : in STD_LOGIC;
     
+    params_valid: OUT STD_LOGIC;
     buffer_base : OUT STD_LOGIC_VECTOR(63 DOWNTO 0);
     tuple_base  : OUT STD_LOGIC_VECTOR(31 DOWNTO 0);
     tuple_high  : OUT STD_LOGIC_VECTOR(31 DOWNTO 0);
@@ -103,6 +104,7 @@ begin
             if is1(rst_n) then
             
                 curr_state <= next_state;
+                params_valid <= '0';
             
                 if is1(regwrite_valid) then
                     case (to_integer(unsigned(regwrite_addr))) is
@@ -118,6 +120,7 @@ begin
                     if (next_state = START_LOADER) then
                         output_stream_selected <= output_stream_candidate;
                         output_stream_selected_free_tuples <= output_stream_candidate_free_tuples;
+                        params_valid <= '1';
                     end if;
                 else
                     if is1(new_tuple_base_vld) then

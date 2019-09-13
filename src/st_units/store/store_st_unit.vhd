@@ -67,6 +67,7 @@ architecture Behavioral of store_st_unit is
 
     COMPONENT store_unit_hls_0
     PORT (
+        agg_result_V_ap_vld : OUT STD_LOGIC;
         m_axi_memory_if_V_AWADDR : OUT STD_LOGIC_VECTOR(63 DOWNTO 0);
         m_axi_memory_if_V_AWLEN : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
         m_axi_memory_if_V_AWSIZE : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
@@ -121,14 +122,13 @@ architecture Behavioral of store_st_unit is
         output_r_TUSER : OUT STD_LOGIC_VECTOR(2 DOWNTO 0);
         output_r_TDEST : OUT STD_LOGIC_VECTOR(13 DOWNTO 0);
         output_r_TLAST : OUT STD_LOGIC_VECTOR(0 DOWNTO 0);
+        free_credits_in_buffer_V : IN STD_LOGIC_VECTOR(11 DOWNTO 0);
         regentry_active : IN STD_LOGIC_VECTOR(0 DOWNTO 0);
         regentry_buffer_base_V : IN STD_LOGIC_VECTOR(63 DOWNTO 0);
         regentry_buffer_iterator_V : IN STD_LOGIC_VECTOR(31 DOWNTO 0);
         regentry_buffer_length_V : IN STD_LOGIC_VECTOR(31 DOWNTO 0);
         regentry_return_addr_V : IN STD_LOGIC_VECTOR(13 DOWNTO 0);
-        regentry_return_value_V : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
-        block_write_count_V : IN STD_LOGIC_VECTOR(11 DOWNTO 0);
-        fills_buffer : IN STD_LOGIC
+        regentry_return_value_V : IN STD_LOGIC_VECTOR(7 DOWNTO 0)
     );
     END COMPONENT;
 
@@ -138,7 +138,7 @@ architecture Behavioral of store_st_unit is
     constant TUPPLE_COUNT : natural := 4;
     constant MEMORY_TYPE_OUTPUT : string := "distributed";
     constant MEMORY_DEPTH_LOG2_OUTPUT : natural := 3;
-    constant ALMOST_FULL_LEVEL_OUTPUT : natural := 8;
+    constant ALMOST_FULL_LEVEL_OUTPUT : natural := 0;
     
     signal credits_list_out_input_buffer : std_logic_vector((2**VIRTUAL_PORT_CNT_LOG2)*MEMORY_DEPTH_LOG2_INPUT-1 downto 0);
     
@@ -171,8 +171,7 @@ architecture Behavioral of store_st_unit is
     signal regentry_buffer_length : STD_LOGIC_VECTOR(31 DOWNTO 0);
     signal regentry_return_addr : STD_LOGIC_VECTOR(13 DOWNTO 0);
     signal regentry_return_value : STD_LOGIC_VECTOR(7 DOWNTO 0);
-    signal block_write_count : STD_LOGIC_VECTOR(11 DOWNTO 0);
-    signal fills_buffer : STD_LOGIC;
+    signal free_credits_in_buffer : STD_LOGIC_VECTOR(11 DOWNTO 0);
     signal agg_result : STD_LOGIC_VECTOR(31 DOWNTO 0);
     
     signal output_r_TVALID : STD_LOGIC;
@@ -188,13 +187,11 @@ architecture Behavioral of store_st_unit is
     signal stream_in_TUSER : STD_LOGIC_VECTOR(2 DOWNTO 0);
     signal stream_in_TDEST : STD_LOGIC_VECTOR(13 DOWNTO 0);
     signal stream_in_TLAST : STD_LOGIC_VECTOR(0 DOWNTO 0);
-    
-    signal active_chan : slv(VIRTUAL_PORT_CNT_LOG2-1 downto 0);
 begin
 
     remap_output_stream: process (ALL)
     begin
-        stream_core_m_ldest <= active_chan;
+        stream_core_m_ldest <= (others => '0');
         stream_core_m_status.yield <= output_r_TLAST(0);
         stream_core_m_status.ptype <= output_r_TUSER;
         stream_core_m_status.cdest <= output_r_TDEST;
@@ -256,8 +253,7 @@ begin
         regentry_buffer_length => regentry_buffer_length,
         regentry_return_addr => regentry_return_addr,
         regentry_return_value => regentry_return_value,
-        block_write_count => block_write_count,
-        fills_buffer => fills_buffer,
+        free_credits_in_buffer => free_credits_in_buffer,
         agg_result => agg_result
     );
 
@@ -367,7 +363,6 @@ begin
         regentry_buffer_length_V => regentry_buffer_length,
         regentry_return_addr_V => regentry_return_addr,
         regentry_return_value_V => regentry_return_value,
-        block_write_count_V => block_write_count,
-        fills_buffer => fills_buffer
+        free_credits_in_buffer_V => free_credits_in_buffer
     );
 end Behavioral;

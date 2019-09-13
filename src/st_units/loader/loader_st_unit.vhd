@@ -122,9 +122,13 @@ architecture Behavioral of loader_st_unit is
         m_axi_memory_if_V_RVALID : IN STD_LOGIC;
         m_axi_memory_if_V_RREADY : OUT STD_LOGIC;
         buffer_base_V : IN STD_LOGIC_VECTOR(63 DOWNTO 0);
+        buffer_base_V_ap_vld : IN STD_LOGIC;
         tuple_base_V : IN STD_LOGIC_VECTOR(31 DOWNTO 0);
+        tuple_base_V_ap_vld : IN STD_LOGIC;
         tuple_high_V : IN STD_LOGIC_VECTOR(31 DOWNTO 0);
+        tuple_high_V_ap_vld : IN STD_LOGIC;
         tuple_free_V : IN STD_LOGIC_VECTOR(31 DOWNTO 0);
+        tuple_free_V_ap_vld : IN STD_LOGIC;
         new_tuple_base_V : OUT STD_LOGIC_VECTOR(31 DOWNTO 0);
         new_tuple_base_V_ap_vld : OUT STD_LOGIC
     );
@@ -162,6 +166,7 @@ architecture Behavioral of loader_st_unit is
     signal tuple_base_V : STD_LOGIC_VECTOR(31 DOWNTO 0);
     signal tuple_high_V : STD_LOGIC_VECTOR(31 DOWNTO 0);
     signal tuple_free_V : STD_LOGIC_VECTOR(31 DOWNTO 0);
+    signal params_valid : STD_LOGIC;
     signal new_tuple_base_V : STD_LOGIC_VECTOR(31 DOWNTO 0);
     signal new_tuple_base_V_ap_vld : STD_LOGIC;
     
@@ -213,6 +218,7 @@ begin
         ap_idle  => ap_idle,
         ap_ready => ap_ready,
         
+        params_valid => params_valid,
         buffer_base => buffer_base_V,
         tuple_base => tuple_base_V,
         tuple_high => tuple_high_V,
@@ -315,9 +321,13 @@ begin
         output_r_TUSER => output_r_TUSER,
         output_r_TDEST => output_r_TDEST,
         buffer_base_V => buffer_base_V,
+        buffer_base_V_ap_vld => params_valid,
         tuple_base_V => tuple_base_V,
+        tuple_base_V_ap_vld => params_valid,
         tuple_high_V => tuple_high_V,
+        tuple_high_V_ap_vld => params_valid,
         tuple_free_V => tuple_free_V,
+        tuple_free_V_ap_vld => params_valid,
         new_tuple_base_V => new_tuple_base_V,
         new_tuple_base_V_ap_vld => new_tuple_base_V_ap_vld
     );

@@ -225,6 +225,4 @@ begin
         doutb => read_data_out
     );
 
-    --assert ALMOST_FULL_LEVEL > 3 report "vaxis_multiport_fifo: ALMOST_FULL_LEVEL must be larger than 3!" severity failure;
-
 end Behavioral;

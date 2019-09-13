@@ -56,10 +56,7 @@ architecture Behavioral of request_scheduler is
     signal req_pipeline_input : request_blob;
 	
 	--shorthands
-	signal recside_input_empty : std_logic;
 	signal recside_output_almost_full : std_logic;
-	signal new_in_chan_is_more_full : std_logic;
-	signal new_in_chan_output_is_full : std_logic;
 	
 	signal output_credits_tmp : unsigned(VIRTUAL_PORT_CNT_LOG2_OUTPUT-1 downto 0);
 begin

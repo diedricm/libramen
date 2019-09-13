@@ -43,8 +43,7 @@ Port (
     regentry_buffer_length : out STD_LOGIC_VECTOR(31 DOWNTO 0);
     regentry_return_addr : out STD_LOGIC_VECTOR(13 DOWNTO 0);
     regentry_return_value : out STD_LOGIC_VECTOR(7 DOWNTO 0);
-    block_write_count : out STD_LOGIC_VECTOR(11 DOWNTO 0);
-    fills_buffer : out STD_LOGIC;
+    free_credits_in_buffer : out STD_LOGIC_VECTOR(11 DOWNTO 0);
     agg_result : in STD_LOGIC_VECTOR(31 DOWNTO 0)
 );
 end store_st_unit_controller;
@@ -107,34 +106,19 @@ begin
     regentry_return_addr <= regmap(to_integer(input_stream_selected)).return_dest;
     regentry_return_value <= regmap(to_integer(input_stream_selected)).return_value;
     
-    compute_free_blocks: process (ALL)
-        variable free_tuples_in_buffer : unsigned(32-1 downto 0);
-        variable available_tuples_in_input : unsigned(32-1 downto 0);
-        variable selected_tuples : unsigned(32-1 downto 0);
-    begin
-        free_tuples_in_buffer := regmap(to_integer(input_stream_selected)).tag_high - regmap(to_integer(input_stream_selected)).tag_index;
-        available_tuples_in_input := to_unsigned(to_integer(input_stream_selected_avail_quples * 4), 32);
-        if (free_tuples_in_buffer <= input_stream_selected_avail_quples) then
-            selected_tuples := free_tuples_in_buffer;
-            fills_buffer <= '1';
-        else
-            selected_tuples := available_tuples_in_input;
-            fills_buffer <= '0';
-        end if;
-        
-        selected_tuples := (selected_tuples + 7) / 8;
-        
-        block_write_count <= std_logic_vector(selected_tuples(11 downto 0));
-    end process;
+    free_credits_in_buffer <= std_logic_vector(to_unsigned(to_integer(input_stream_selected_avail_quples), 12));
     
     curr_input_chan <= unsigned(stream_s_status.cdest(VIRTUAL_PORT_CNT_LOG2-1 downto 0));
     curr_input_active <= chan_active(to_integer(curr_input_chan));
     main: process(ap_clk)
-        variable input_reg : integer := to_integer(unsigned(stream_s_tuples(0).tag));
+        variable tmp_branch : boolean;
     begin
          if rising_edge(ap_clk) then
-            if is1(rst_n) then
+            if is0(rst_n) then
+                chan_req_valid <= '0';
+            else
                 chan_clear_outstanding <= '0';
+                chan_req_valid <= '0';
             
                 curr_state <= next_state;
            
@@ -149,39 +133,47 @@ begin
                         when others => report "ERROR in regaccess decoding" severity failure;
                     end case;
                 end if;
-            
+                
+                tmp_branch := false;
+                for i in 0 to 2**VIRTUAL_PORT_CNT_LOG2-1 loop
+                    if (credit_list_input(i) < 2**MEMORY_DEPTH_LOG2_INPUT-1) AND is0(chan_active(i)) then
+                        chan_req <= std_logic_vector(to_unsigned(i, VIRTUAL_PORT_CNT_LOG2));
+                        chan_req_valid <= '1';
+                        tmp_branch := true;
+                    end if;
+                end loop;
+                
+                if (curr_state = WAIT_ON_LOADER) AND NOT(tmp_branch) then
+                    chan_req <= std_logic_vector(input_stream_selected);
+                    chan_req_valid <= '1';
+                    
+                    if is1(chan_req_valid AND chan_req_ready) then
+                        if NOT is0(char_req_counter) then
+                            char_req_counter <= char_req_counter - 1;
+                        else
+                            chan_req_valid <= '0';
+                        end if;
+                    end if;
+                    
+                    if (is1(stream_s_status.valid AND stream_s_ready) AND is_hardend(stream_s_status)) then
+                        char_req_counter <= (others => '0');
+                        chan_clear_outstanding <= '1';
+                    end if;
+                end if;
+                
                 if (curr_state = REC_MSG) AND (next_state = START_LOADER) then
                     input_stream_selected <= input_stream_candidate;
                     input_stream_selected_avail_quples <= input_stream_candidate_avail_quples;
-                    char_req_counter <= to_unsigned(to_integer(unsigned(block_write_count) * 2), MEMORY_DEPTH_LOG2_INPUT);
+                end if;
+                    
+                if (curr_state = START_LOADER) AND (next_state = WAIT_ON_LOADER) then
+                    char_req_counter <= to_unsigned(to_integer(2**MEMORY_DEPTH_LOG2_INPUT - 1 - input_stream_selected_avail_quples), MEMORY_DEPTH_LOG2_INPUT);
                 end if;
                     
                 if (curr_state = WAIT_ON_LOADER) AND (next_state = REC_MSG) then
                     regmap(to_integer(input_stream_selected)).tag_index <= unsigned(agg_result);
                     if NOT(unsigned(agg_result) < regmap(to_integer(input_stream_selected)).tag_high) then
                         chan_active(to_integer(input_stream_selected)) <= '0';
-                    end if;
-                end if;
-                    
-                    
-                if (credit_list_input(to_integer(input_stream_iterator)) > 0) AND is0(chan_active(to_integer(input_stream_iterator))) AND (curr_input_chan /= input_stream_iterator) then
-                    chan_req <= std_logic_vector(input_stream_iterator);
-                    chan_req_valid <= '1';
-                elsif (curr_state = WAIT_ON_LOADER) then
-                    chan_req <= std_logic_vector(curr_input_chan);
-                    if curr_input_chan /= 0 then
-                        chan_req_valid <= '1';
-                    else
-                        chan_req_valid <= '0';
-                    end if;
-                    
-                    if is1(chan_req_valid AND chan_req_ready) then
-                        char_req_counter <= char_req_counter - 1;
-                    end if;
-                    
-                    if is1(stream_s_status.valid AND stream_s_ready) AND is_hardend(stream_s_status) then
-                        char_req_counter <= (others => '0');
-                        chan_clear_outstanding <= '1'; 
                     end if;
                 end if;
                     
@@ -194,7 +186,8 @@ begin
         if rising_edge(ap_clk) then
             if is1(rst_n) then
                 if is1(chan_active(to_integer(input_stream_iterator)))
-                        AND (credit_list_input(to_integer(input_stream_iterator)) > input_stream_candidate_avail_quples
+                        AND (credit_list_input(to_integer(input_stream_iterator)) /= (2**MEMORY_DEPTH_LOG2_INPUT - 1))
+                        AND (credit_list_input(to_integer(input_stream_iterator)) < input_stream_candidate_avail_quples
                             OR is0(input_stream_candidate_vld)
                             OR (input_stream_iterator = input_stream_candidate)
                         ) then
@@ -216,7 +209,7 @@ begin
     generic map (
         TUPPLE_COUNT => 4,
         VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2,
-        CHAN_ADDR_BY_CDEST => true,
+        CHAN_ADDR_BY_CDEST => false,
         HIGH_REG_ADDR => REQ_TAG_HIGH_REG_ADDR,
         INPUT_CONTAINS_DATA => true
     ) port map (
