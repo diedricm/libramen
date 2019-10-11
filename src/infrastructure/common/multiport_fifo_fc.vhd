@@ -192,38 +192,40 @@ begin
         stream_m_ready  => stream_ext_m_ready
     );
     
-    perf_counter_section: if true generate
-        constant DEBUG_PERF_COUNTER_WINSIZE : natural := 1000;
-        signal stream_ext_s_debug_active_now : std_logic;
-        signal stream_ext_m_debug_active_now : std_logic;
-        signal stream_ext_s_debug_activation_window_1k : std_logic_vector(DEBUG_PERF_COUNTER_WINSIZE-1 downto 0) := (others => '0');
-        signal stream_ext_m_debug_activation_window_1k : std_logic_vector(DEBUG_PERF_COUNTER_WINSIZE-1 downto 0) := (others => '0');
-        signal stream_ext_s_debug_activation_window_num : natural range 0 to DEBUG_PERF_COUNTER_WINSIZE;
-        signal stream_ext_m_debug_activation_window_num : natural range 0 to DEBUG_PERF_COUNTER_WINSIZE;
-    begin
-        stream_ext_s_debug_active_now <= '1' when contains_data(stream_ext_s_status) AND is1(stream_ext_s_status.valid and stream_ext_s_ready) else '0';
-        stream_ext_m_debug_active_now <= '1' when contains_data(stream_ext_m_status) AND is1(stream_ext_m_status.valid and stream_ext_m_ready) else '0';
-        debug_perf_counter: process(ap_clk)
-            variable tmp : natural range 0 to DEBUG_PERF_COUNTER_WINSIZE;
-        begin
-            if rising_edge(ap_clk) and is1(rst_n) then
-                stream_ext_s_debug_activation_window_1k(0) <= stream_ext_s_debug_active_now;
-                tmp := to_integer(unsigned(stream_ext_s_debug_activation_window_1k(0 downto 0)));
-                for i in 1 to DEBUG_PERF_COUNTER_WINSIZE-1 loop
-                    stream_ext_s_debug_activation_window_1k(i) <= stream_ext_s_debug_activation_window_1k(i-1);
-                    tmp := tmp + to_integer(unsigned(stream_ext_s_debug_activation_window_1k(i downto i)));
-                end loop;
-                stream_ext_s_debug_activation_window_num <= tmp;
-                
-                stream_ext_m_debug_activation_window_1k(0) <= stream_ext_m_debug_active_now;
-                tmp := to_integer(unsigned(stream_ext_m_debug_activation_window_1k(0 downto 0)));
-                for i in 1 to DEBUG_PERF_COUNTER_WINSIZE-1 loop
-                    stream_ext_m_debug_activation_window_1k(i) <= stream_ext_m_debug_activation_window_1k(i-1);
-                    tmp := tmp + to_integer(unsigned(stream_ext_m_debug_activation_window_1k(i downto i)));
-                end loop;            
-                stream_ext_m_debug_activation_window_num <= tmp;
-            end if;
-        end process;
-    end generate;
+    debug_s: entity libramen.stream_checker
+    generic map (
+        TUPPLE_COUNT => TUPPLE_COUNT,
+        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2_INPUT,
+        REPORT_FLIT_DROP => true,
+        PERFCOUNTER_ENABLE => true,
+        PERFCOUNTER_WINDOW => 1000,
+        PERFCOUNTER_REPORT_INTERVAL => 10
+    ) port map (
+        ap_clk => ap_clk,
+        rst_n => rst_n,
+        
+        debug_stream_tuples => stream_ext_s_tuples,
+        debug_stream_status => stream_ext_s_status,
+        debug_stream_ready  => stream_ext_s_ready,
+        debug_stream_ldest  => (others => '0')
+    );
+    
+    debug_m: entity libramen.stream_checker
+    generic map (
+        TUPPLE_COUNT => TUPPLE_COUNT,
+        VIRTUAL_PORT_CNT_LOG2 => VIRTUAL_PORT_CNT_LOG2_OUTPUT,
+        REPORT_FLIT_DROP => true,
+        PERFCOUNTER_ENABLE => true,
+        PERFCOUNTER_WINDOW => 1000,
+        PERFCOUNTER_REPORT_INTERVAL => 10
+    ) port map (
+        ap_clk => ap_clk,
+        rst_n => rst_n,
+        
+        debug_stream_tuples => stream_ext_m_tuples,
+        debug_stream_status => stream_ext_m_status,
+        debug_stream_ready  => stream_ext_m_ready,
+        debug_stream_ldest  => (others => '0')
+    );
 
 end Behavioral;

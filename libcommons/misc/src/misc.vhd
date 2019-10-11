@@ -28,6 +28,9 @@ package misc is
 	function is1(ARG : std_logic) return boolean;
 	function is1(ARG : std_logic_vector) return boolean;
 	function is1(ARG : unsigned) return boolean;
+	function is_binary(ARG : std_logic) return boolean;
+	function is_binary(ARG : std_logic_vector) return boolean;
+	function is_binary(ARG : unsigned) return boolean;
     
     function and_reduce(ARG : std_logic_vector) return std_logic;
     function or_reduce(ARG : std_logic_vector) return std_logic;
@@ -62,6 +65,11 @@ package misc is
     type halfbiased is array (natural range <>) of std_logic;
     function halfbiasedToTwos(ARG : halfbiased) return signed;
     function twosToHalfBiased(ARG : signed) return halfbiased;
+    
+    --convert slv to hex or octal string TAKEN FROM IEEE 2008 standard lib
+    function slv_to_oct_string (value : STD_LOGIC_VECTOR) return STRING;
+    function slv_to_hex_string (value : STD_LOGIC_VECTOR) return STRING;
+    
     
     --VHDL 2008 N-dimensional types
     --type slv is array (natural range <>) of std_logic;
@@ -146,6 +154,26 @@ package body misc is
 	function is1(ARG : unsigned) return boolean is
 	begin
 		return is1(std_logic_vector(ARG));
+    end;
+    
+    function is_binary(ARG : std_logic) return boolean is
+    begin
+        return (is1(ARG) or is0(ARG));
+    end;
+    
+	function is_binary(ARG : std_logic_vector) return boolean is
+	begin
+        for i in ARG'high downto ARG'low loop
+            if NOT is_binary(ARG(i)) then
+                return false;
+            end if;
+        end loop;
+        return true;
+    end;
+    
+	function is_binary(ARG : unsigned) return boolean is
+	begin
+	   return is_binary(std_logic_vector(ARG));
     end;
     
     function and_reduce(ARG : std_logic_vector) return std_logic is
@@ -309,5 +337,81 @@ package body misc is
     begin
         result(ARG'HIGH) := NOT(result(ARG'HIGH));
         return halfbiased(result);
+    end;
+    
+    function slv_to_oct_string (value : STD_LOGIC_VECTOR) return STRING is
+        constant result_length : NATURAL := (value'length+2)/3;
+        variable pad           : STD_ULOGIC_VECTOR(1 to result_length*3 - value'length);
+        variable padded_value  : STD_ULOGIC_VECTOR(1 to result_length*3);
+        variable result        : STRING(1 to result_length);
+        variable tri           : STD_ULOGIC_VECTOR(1 to 3);
+    begin
+        if value (value'left) = 'Z' then
+            pad := (others => 'Z');
+        else
+            pad := (others => '0');
+        end if;
+        
+        padded_value := pad & value;
+        
+        for i in 1 to result_length loop
+            tri := To_X01Z(padded_value(3*i-2 to 3*i));
+            case tri is
+                when o"0"   => result(i) := '0';
+                when o"1"   => result(i) := '1';
+                when o"2"   => result(i) := '2';
+                when o"3"   => result(i) := '3';
+                when o"4"   => result(i) := '4';
+                when o"5"   => result(i) := '5';
+                when o"6"   => result(i) := '6';
+                when o"7"   => result(i) := '7';
+                when "ZZZ"  => result(i) := 'Z';
+                when others => result(i) := 'X';
+            end case;
+        end loop;
+        return result;
+    end;
+    
+    function slv_to_hex_string (value : STD_LOGIC_VECTOR) return STRING is
+        constant result_length : NATURAL := (value'length+3)/4;
+        variable pad           : STD_ULOGIC_VECTOR(1 to result_length*4 - value'length);
+        variable padded_value  : STD_ULOGIC_VECTOR(1 to result_length*4);
+        variable result        : STRING(1 to result_length);
+        variable quad          : STD_ULOGIC_VECTOR(1 to 4);
+    begin
+    
+        if value (value'left) = 'Z' then
+            pad := (others => 'Z');
+        else
+            pad := (others => '0');
+        end if;
+        
+        padded_value := pad & value;
+        
+        for i in 1 to result_length loop
+            quad := To_X01Z(padded_value(4*i-3 to 4*i));
+            case quad is
+                when x"0"   => result(i) := '0';
+                when x"1"   => result(i) := '1';
+                when x"2"   => result(i) := '2';
+                when x"3"   => result(i) := '3';
+                when x"4"   => result(i) := '4';
+                when x"5"   => result(i) := '5';
+                when x"6"   => result(i) := '6';
+                when x"7"   => result(i) := '7';
+                when x"8"   => result(i) := '8';
+                when x"9"   => result(i) := '9';
+                when x"A"   => result(i) := 'A';
+                when x"B"   => result(i) := 'B';
+                when x"C"   => result(i) := 'C';
+                when x"D"   => result(i) := 'D';
+                when x"E"   => result(i) := 'E';
+                when x"F"   => result(i) := 'F';
+                when "ZZZZ" => result(i) := 'Z';
+                when others => result(i) := 'X';
+            end case;
+        end loop;
+        
+        return result;
     end;
 end misc;
